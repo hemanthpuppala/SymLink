@@ -1,0 +1,2689 @@
+openapi: 3.1.0
+info:
+  title: FlowGrid Water Plant Discovery API
+  description: |
+    RESTful API for FlowGrid Water Plant Discovery Platform V1.
+
+    ## Authentication
+    - Consumer App: JWT Bearer token (username/password login)
+    - Owner App: JWT Bearer token (phone/password login)
+    - Admin Dashboard: JWT Bearer token (username/password login)
+
+    ## Rate Limiting
+    - Public endpoints: 100 requests/minute per IP
+    - Authenticated endpoints: 500 requests/minute per user
+
+    ## Response Format
+    All responses follow the standard envelope:
+    ```json
+    {
+      "success": true,
+      "data": { ... },
+      "meta": { "timestamp": "...", "requestId": "..." }
+    }
+    ```
+
+    Error responses:
+    ```json
+    {
+      "success": false,
+      "error": {
+        "code": "ERROR_CODE",
+        "message": "Human readable message",
+        "details": { ... }
+      }
+    }
+    ```
+  version: 1.0.0
+  contact:
+    name: FlowGrid API Support
+    email: api@flowgrid.io
+
+servers:
+  - url: https://api.flowgrid.io/v1
+    description: Production server
+  - url: https://staging-api.flowgrid.io/v1
+    description: Staging server
+  - url: http://localhost:3000/v1
+    description: Local development
+
+tags:
+  - name: Consumer Auth
+    description: Consumer authentication endpoints
+  - name: Plants (Public)
+    description: Public plant discovery endpoints
+  - name: Plants (Consumer)
+    description: Authenticated consumer plant endpoints
+  - name: Consumer Chat
+    description: Consumer messaging endpoints
+  - name: Owner Auth
+    description: Owner authentication endpoints
+  - name: Owner Profile
+    description: Owner profile and plant management
+  - name: Owner Documents
+    description: Owner document upload and verification
+  - name: Owner Chat
+    description: Owner messaging endpoints
+  - name: Admin Auth
+    description: Admin authentication endpoints
+  - name: Admin Verification
+    description: Admin verification management
+  - name: Admin Plants
+    description: Admin plant management
+  - name: WebSocket
+    description: Real-time WebSocket gateway (ws://localhost:3000/chat)
+
+paths:
+  # ============================================================================
+  # CONSUMER AUTH
+  # ============================================================================
+  /consumer/auth/login:
+    post:
+      tags:
+        - Consumer Auth
+      summary: Consumer login
+      description: Authenticate consumer with username and password
+      operationId: consumerLogin
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConsumerLoginRequest'
+      responses:
+        '200':
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+  /consumer/auth/refresh:
+    post:
+      tags:
+        - Consumer Auth
+      summary: Refresh access token
+      operationId: consumerRefreshToken
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefreshTokenRequest'
+      responses:
+        '200':
+          description: Token refreshed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  # ============================================================================
+  # PLANTS (PUBLIC)
+  # ============================================================================
+  /plants:
+    get:
+      tags:
+        - Plants (Public)
+      summary: List plants near location
+      description: |
+        Get water plants within specified radius of a location.
+        Results are sorted by distance by default.
+      operationId: listPlants
+      parameters:
+        - name: lat
+          in: query
+          required: true
+          description: Latitude of center point
+          schema:
+            type: number
+            format: double
+            minimum: -90
+            maximum: 90
+            example: 17.385044
+        - name: lng
+          in: query
+          required: true
+          description: Longitude of center point
+          schema:
+            type: number
+            format: double
+            minimum: -180
+            maximum: 180
+            example: 78.486671
+        - name: radius
+          in: query
+          description: Search radius in meters (default 5000, max 50000)
+          schema:
+            type: integer
+            default: 5000
+            minimum: 100
+            maximum: 50000
+        - name: sort
+          in: query
+          description: Sort order for results
+          schema:
+            type: string
+            enum: [distance, tds_asc, price_asc, price_desc]
+            default: distance
+        - name: filter_open
+          in: query
+          description: Filter to only open plants
+          schema:
+            type: boolean
+            default: false
+        - name: filter_verified
+          in: query
+          description: Filter to only verified plants
+          schema:
+            type: boolean
+            default: false
+        - name: page
+          in: query
+          description: Page number (1-indexed)
+          schema:
+            type: integer
+            default: 1
+            minimum: 1
+        - name: limit
+          in: query
+          description: Items per page
+          schema:
+            type: integer
+            default: 20
+            minimum: 1
+            maximum: 100
+      responses:
+        '200':
+          description: List of plants
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlantListResponse'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+  /plants/{plantId}:
+    get:
+      tags:
+        - Plants (Public)
+      summary: Get plant details
+      description: Get full details of a specific plant including photos and contact info
+      operationId: getPlant
+      parameters:
+        - $ref: '#/components/parameters/PlantId'
+      responses:
+        '200':
+          description: Plant details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlantDetailResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /plants/{plantId}/view:
+    post:
+      tags:
+        - Plants (Consumer)
+      summary: Record plant view
+      description: Record that a consumer viewed a plant's profile (for analytics)
+      operationId: recordPlantView
+      parameters:
+        - $ref: '#/components/parameters/PlantId'
+      security:
+        - bearerAuth: []
+        - {}  # Also allows anonymous
+      responses:
+        '204':
+          description: View recorded
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /plants/share/{plantId}:
+    get:
+      tags:
+        - Plants (Public)
+      summary: Get plant public profile
+      description: Public profile page for shared plant links (works without app)
+      operationId: getPlantPublicProfile
+      parameters:
+        - $ref: '#/components/parameters/PlantId'
+      responses:
+        '200':
+          description: Public plant profile
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlantPublicProfile'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ============================================================================
+  # OWNER AUTH
+  # ============================================================================
+  /owner/auth/register:
+    post:
+      tags:
+        - Owner Auth
+      summary: Register new owner
+      description: Register a new plant owner account
+      operationId: ownerRegister
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OwnerRegisterRequest'
+      responses:
+        '201':
+          description: Registration successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OwnerAuthResponse'
+        '409':
+          description: Phone number already registered
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+  /owner/auth/login:
+    post:
+      tags:
+        - Owner Auth
+      summary: Owner login
+      description: Authenticate owner with phone and password
+      operationId: ownerLogin
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OwnerLoginRequest'
+      responses:
+        '200':
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OwnerAuthResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+  /owner/auth/refresh:
+    post:
+      tags:
+        - Owner Auth
+      summary: Refresh owner access token
+      operationId: ownerRefreshToken
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefreshTokenRequest'
+      responses:
+        '200':
+          description: Token refreshed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OwnerAuthResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /owner/auth/password/reset:
+    post:
+      tags:
+        - Owner Auth
+      summary: Request password reset
+      description: Send password reset OTP to owner's phone
+      operationId: ownerRequestPasswordReset
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - phone
+              properties:
+                phone:
+                  type: string
+                  pattern: '^\+91[6-9]\d{9}$'
+                  example: '+919876543210'
+      responses:
+        '200':
+          description: OTP sent
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /owner/auth/password/confirm:
+    post:
+      tags:
+        - Owner Auth
+      summary: Confirm password reset
+      description: Verify OTP and set new password
+      operationId: ownerConfirmPasswordReset
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - phone
+                - otp
+                - newPassword
+              properties:
+                phone:
+                  type: string
+                  pattern: '^\+91[6-9]\d{9}$'
+                otp:
+                  type: string
+                  minLength: 6
+                  maxLength: 6
+                newPassword:
+                  type: string
+                  minLength: 8
+      responses:
+        '200':
+          description: Password reset successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '400':
+          description: Invalid or expired OTP
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  # ============================================================================
+  # OWNER PROFILE
+  # ============================================================================
+  /owner/profile:
+    get:
+      tags:
+        - Owner Profile
+      summary: Get owner profile
+      description: Get current owner's profile and plant information
+      operationId: getOwnerProfile
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Owner profile
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OwnerProfileResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+    patch:
+      tags:
+        - Owner Profile
+      summary: Update owner profile
+      description: Update owner's basic information
+      operationId: updateOwnerProfile
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OwnerProfileUpdateRequest'
+      responses:
+        '200':
+          description: Profile updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OwnerProfileResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+  /owner/plant:
+    get:
+      tags:
+        - Owner Profile
+      summary: Get owner's plant
+      description: Get the plant associated with this owner
+      operationId: getOwnerPlant
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Plant details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OwnerPlantResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          description: No plant registered yet
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    post:
+      tags:
+        - Owner Profile
+      summary: Create plant
+      description: Create a new plant listing for this owner
+      operationId: createOwnerPlant
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PlantCreateRequest'
+      responses:
+        '201':
+          description: Plant created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OwnerPlantResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '409':
+          description: Owner already has a plant
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+    patch:
+      tags:
+        - Owner Profile
+      summary: Update plant
+      description: Update plant information
+      operationId: updateOwnerPlant
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PlantUpdateRequest'
+      responses:
+        '200':
+          description: Plant updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OwnerPlantResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+  /owner/plant/status:
+    patch:
+      tags:
+        - Owner Profile
+      summary: Toggle plant open status
+      description: Toggle whether the plant is currently open
+      operationId: togglePlantStatus
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - isOpen
+              properties:
+                isOpen:
+                  type: boolean
+      responses:
+        '200':
+          description: Status updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OwnerPlantResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /owner/plant/photos:
+    post:
+      tags:
+        - Owner Profile
+      summary: Upload plant photo
+      description: Upload a photo for the plant (max 5 photos, max 5MB each)
+      operationId: uploadPlantPhoto
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - photo
+              properties:
+                photo:
+                  type: string
+                  format: binary
+                  description: Image file (JPG, PNG, WebP, max 5MB)
+      responses:
+        '201':
+          description: Photo uploaded
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      photoUrl:
+                        type: string
+                        format: uri
+                      photos:
+                        type: array
+                        items:
+                          type: string
+                          format: uri
+        '400':
+          description: Maximum photos reached or invalid file
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+    delete:
+      tags:
+        - Owner Profile
+      summary: Delete plant photo
+      description: Remove a photo from the plant
+      operationId: deletePlantPhoto
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - photoUrl
+              properties:
+                photoUrl:
+                  type: string
+                  format: uri
+      responses:
+        '200':
+          description: Photo deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /owner/plant/share:
+    get:
+      tags:
+        - Owner Profile
+      summary: Get shareable link
+      description: Get shareable link and QR code for the plant profile
+      operationId: getPlantShareLink
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Shareable links
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      shareUrl:
+                        type: string
+                        format: uri
+                        example: 'https://flowgrid.io/p/abc123'
+                      qrCodeUrl:
+                        type: string
+                        format: uri
+                        description: URL to QR code image
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /owner/analytics:
+    get:
+      tags:
+        - Owner Profile
+      summary: Get plant analytics
+      description: Get view counts and basic analytics for the plant
+      operationId: getPlantAnalytics
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Analytics data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlantAnalyticsResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  # ============================================================================
+  # OWNER DOCUMENTS
+  # ============================================================================
+  /owner/verification:
+    get:
+      tags:
+        - Owner Documents
+      summary: Get verification status
+      description: Get current verification request status and history
+      operationId: getVerificationStatus
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Verification status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VerificationStatusResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+    post:
+      tags:
+        - Owner Documents
+      summary: Submit verification documents
+      description: Submit documents for verification (government ID and business registration required)
+      operationId: submitVerification
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - governmentId
+                - businessRegistration
+              properties:
+                governmentId:
+                  type: string
+                  format: binary
+                  description: Government ID (Aadhaar/PAN) - JPG, PNG, or PDF
+                businessRegistration:
+                  type: string
+                  format: binary
+                  description: Business registration certificate - JPG, PNG, or PDF
+                fssaiLicense:
+                  type: string
+                  format: binary
+                  description: FSSAI license (optional) - JPG, PNG, or PDF
+      responses:
+        '201':
+          description: Documents submitted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VerificationStatusResponse'
+        '400':
+          description: Already has pending verification
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+  # ============================================================================
+  # OWNER NOTIFICATIONS
+  # ============================================================================
+  /owner/notifications:
+    get:
+      tags:
+        - Owner Profile
+      summary: Get notifications
+      description: Get owner's notifications (verification status changes, etc.)
+      operationId: getOwnerNotifications
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: unread
+          in: query
+          description: Filter to unread only
+          schema:
+            type: boolean
+            default: false
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+      responses:
+        '200':
+          description: Notifications list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationsResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /owner/notifications/{notificationId}/read:
+    post:
+      tags:
+        - Owner Profile
+      summary: Mark notification as read
+      operationId: markNotificationRead
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: notificationId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Marked as read
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ============================================================================
+  # CONSUMER CHAT
+  # ============================================================================
+  /consumer/conversations:
+    get:
+      tags:
+        - Consumer Chat
+      summary: List consumer conversations
+      description: Get all conversations for the authenticated consumer, sorted by most recent activity
+      operationId: listConsumerConversations
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+      responses:
+        '200':
+          description: Conversations list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConversationListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /consumer/conversations/{plantId}:
+    get:
+      tags:
+        - Consumer Chat
+      summary: Get or create conversation with plant owner
+      description: Get existing conversation or create new one for the specified plant
+      operationId: getOrCreateConversation
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/PlantId'
+      responses:
+        '200':
+          description: Conversation details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConversationResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /consumer/conversations/{conversationId}/messages:
+    get:
+      tags:
+        - Consumer Chat
+      summary: Get messages in conversation
+      description: Get messages for a conversation, paginated, newest first
+      operationId: getConsumerMessages
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: conversationId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: before
+          in: query
+          description: Get messages before this message ID (for pagination)
+          schema:
+            type: string
+            format: uuid
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+            maximum: 100
+      responses:
+        '200':
+          description: Messages list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    post:
+      tags:
+        - Consumer Chat
+      summary: Send message
+      description: Send a new message in the conversation
+      operationId: sendConsumerMessage
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: conversationId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SendMessageRequest'
+      responses:
+        '201':
+          description: Message sent
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /consumer/conversations/{conversationId}/read:
+    post:
+      tags:
+        - Consumer Chat
+      summary: Mark messages as read
+      description: Mark all messages in conversation as read up to a specific message
+      operationId: markConsumerMessagesRead
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: conversationId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - upToMessageId
+              properties:
+                upToMessageId:
+                  type: string
+                  format: uuid
+      responses:
+        '204':
+          description: Messages marked as read
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /consumer/conversations/{conversationId}/retention:
+    patch:
+      tags:
+        - Consumer Chat
+      summary: Set message retention
+      description: Configure message auto-deletion for this conversation
+      operationId: setConsumerRetention
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: conversationId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - retention
+              properties:
+                retention:
+                  type: string
+                  enum: [off, 24h, 7d, 30d]
+      responses:
+        '200':
+          description: Retention updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConversationResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ============================================================================
+  # OWNER CHAT
+  # ============================================================================
+  /owner/conversations:
+    get:
+      tags:
+        - Owner Chat
+      summary: List owner conversations
+      description: Get all conversations for the authenticated owner, sorted by most recent activity
+      operationId: listOwnerConversations
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+      responses:
+        '200':
+          description: Conversations list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConversationListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /owner/conversations/{conversationId}/messages:
+    get:
+      tags:
+        - Owner Chat
+      summary: Get messages in conversation
+      description: Get messages for a conversation, paginated, newest first
+      operationId: getOwnerMessages
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: conversationId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: before
+          in: query
+          description: Get messages before this message ID (for pagination)
+          schema:
+            type: string
+            format: uuid
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+            maximum: 100
+      responses:
+        '200':
+          description: Messages list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    post:
+      tags:
+        - Owner Chat
+      summary: Send message
+      description: Send a new message in the conversation
+      operationId: sendOwnerMessage
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: conversationId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SendMessageRequest'
+      responses:
+        '201':
+          description: Message sent
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /owner/conversations/{conversationId}/read:
+    post:
+      tags:
+        - Owner Chat
+      summary: Mark messages as read
+      description: Mark all messages in conversation as read up to a specific message
+      operationId: markOwnerMessagesRead
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: conversationId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - upToMessageId
+              properties:
+                upToMessageId:
+                  type: string
+                  format: uuid
+      responses:
+        '204':
+          description: Messages marked as read
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /owner/conversations/{conversationId}/retention:
+    patch:
+      tags:
+        - Owner Chat
+      summary: Set message retention
+      description: Configure message auto-deletion for this conversation
+      operationId: setOwnerRetention
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: conversationId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - retention
+              properties:
+                retention:
+                  type: string
+                  enum: [off, 24h, 7d, 30d]
+      responses:
+        '200':
+          description: Retention updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConversationResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ============================================================================
+  # ADMIN AUTH
+  # ============================================================================
+  /admin/auth/login:
+    post:
+      tags:
+        - Admin Auth
+      summary: Admin login
+      description: Authenticate admin with username and password
+      operationId: adminLogin
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminLoginRequest'
+      responses:
+        '200':
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminAuthResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /admin/auth/refresh:
+    post:
+      tags:
+        - Admin Auth
+      summary: Refresh admin access token
+      operationId: adminRefreshToken
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefreshTokenRequest'
+      responses:
+        '200':
+          description: Token refreshed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminAuthResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  # ============================================================================
+  # ADMIN DASHBOARD
+  # ============================================================================
+  /admin/dashboard:
+    get:
+      tags:
+        - Admin Verification
+      summary: Get dashboard summary
+      description: Get counts of plants and verifications for dashboard
+      operationId: getAdminDashboard
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Dashboard summary
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminDashboardResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  # ============================================================================
+  # ADMIN VERIFICATION
+  # ============================================================================
+  /admin/verifications:
+    get:
+      tags:
+        - Admin Verification
+      summary: List verification requests
+      description: Get list of verification requests with filtering
+      operationId: listVerifications
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: status
+          in: query
+          description: Filter by status
+          schema:
+            type: string
+            enum: [pending, approved, rejected]
+        - name: sort
+          in: query
+          description: Sort order
+          schema:
+            type: string
+            enum: [submitted_asc, submitted_desc]
+            default: submitted_desc
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+      responses:
+        '200':
+          description: Verification requests
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminVerificationListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /admin/verifications/{requestId}:
+    get:
+      tags:
+        - Admin Verification
+      summary: Get verification details
+      description: Get full details of a verification request including documents
+      operationId: getVerificationDetails
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: requestId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Verification details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminVerificationDetailResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /admin/verifications/{requestId}/approve:
+    post:
+      tags:
+        - Admin Verification
+      summary: Approve verification
+      description: Approve a verification request
+      operationId: approveVerification
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: requestId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Verification approved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Request already decided
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /admin/verifications/{requestId}/reject:
+    post:
+      tags:
+        - Admin Verification
+      summary: Reject verification
+      description: Reject a verification request with reason
+      operationId: rejectVerification
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: requestId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - reason
+              properties:
+                reason:
+                  type: string
+                  minLength: 10
+                  maxLength: 500
+                  description: Reason for rejection (shown to owner)
+      responses:
+        '200':
+          description: Verification rejected
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Request already decided
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+  # ============================================================================
+  # ADMIN PLANTS
+  # ============================================================================
+  /admin/plants:
+    get:
+      tags:
+        - Admin Plants
+      summary: List all plants
+      description: Get list of all plants with search and filtering
+      operationId: adminListPlants
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: search
+          in: query
+          description: Search by plant name
+          schema:
+            type: string
+        - name: status
+          in: query
+          description: Filter by verification status
+          schema:
+            type: string
+            enum: [unverified, pending, verified, rejected]
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+      responses:
+        '200':
+          description: Plants list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminPlantListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /admin/plants/{plantId}:
+    get:
+      tags:
+        - Admin Plants
+      summary: Get plant details (admin)
+      description: Get full plant details including owner information
+      operationId: adminGetPlant
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/PlantId'
+      responses:
+        '200':
+          description: Plant details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminPlantDetailResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ============================================================================
+  # HEALTH CHECK
+  # ============================================================================
+  /health:
+    get:
+      summary: Health check
+      description: API health check endpoint
+      operationId: healthCheck
+      responses:
+        '200':
+          description: Service healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: 'healthy'
+                  timestamp:
+                    type: string
+                    format: date-time
+                  version:
+                    type: string
+                    example: '1.0.0'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT access token
+
+  parameters:
+    PlantId:
+      name: plantId
+      in: path
+      required: true
+      description: Plant unique identifier
+      schema:
+        type: string
+        format: uuid
+
+  responses:
+    Unauthorized:
+      description: Authentication required or invalid
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            success: false
+            error:
+              code: 'UNAUTHORIZED'
+              message: 'Invalid or expired token'
+
+    Forbidden:
+      description: Insufficient permissions
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            success: false
+            error:
+              code: 'FORBIDDEN'
+              message: 'You do not have permission to perform this action'
+
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            success: false
+            error:
+              code: 'NOT_FOUND'
+              message: 'Resource not found'
+
+    ValidationError:
+      description: Validation error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ValidationErrorResponse'
+
+  schemas:
+    # ========== Common ==========
+    SuccessResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: object
+        meta:
+          $ref: '#/components/schemas/ResponseMeta'
+
+    ErrorResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: false
+        error:
+          type: object
+          properties:
+            code:
+              type: string
+            message:
+              type: string
+            details:
+              type: object
+
+    ValidationErrorResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: false
+        error:
+          type: object
+          properties:
+            code:
+              type: string
+              example: 'VALIDATION_ERROR'
+            message:
+              type: string
+              example: 'Validation failed'
+            details:
+              type: array
+              items:
+                type: object
+                properties:
+                  field:
+                    type: string
+                  message:
+                    type: string
+
+    ResponseMeta:
+      type: object
+      properties:
+        timestamp:
+          type: string
+          format: date-time
+        requestId:
+          type: string
+          format: uuid
+
+    PaginationMeta:
+      type: object
+      properties:
+        page:
+          type: integer
+        limit:
+          type: integer
+        total:
+          type: integer
+        totalPages:
+          type: integer
+
+    # ========== Auth ==========
+    ConsumerLoginRequest:
+      type: object
+      required:
+        - username
+        - password
+      properties:
+        username:
+          type: string
+          minLength: 3
+          maxLength: 50
+        password:
+          type: string
+          minLength: 1
+
+    OwnerLoginRequest:
+      type: object
+      required:
+        - phone
+        - password
+      properties:
+        phone:
+          type: string
+          pattern: '^\+91[6-9]\d{9}$'
+          example: '+919876543210'
+        password:
+          type: string
+          minLength: 1
+
+    OwnerRegisterRequest:
+      type: object
+      required:
+        - name
+        - phone
+        - password
+        - plantName
+        - address
+        - latitude
+        - longitude
+      properties:
+        name:
+          type: string
+          minLength: 2
+          maxLength: 100
+          example: 'Ramesh Kumar'
+        phone:
+          type: string
+          pattern: '^\+91[6-9]\d{9}$'
+          example: '+919876543210'
+        password:
+          type: string
+          minLength: 8
+        email:
+          type: string
+          format: email
+        plantName:
+          type: string
+          minLength: 2
+          maxLength: 200
+          example: 'Pure Water Plant'
+        address:
+          type: string
+          example: '123 Main Road, Hyderabad'
+        latitude:
+          type: number
+          format: double
+          minimum: -90
+          maximum: 90
+        longitude:
+          type: number
+          format: double
+          minimum: -180
+          maximum: 180
+        operatingHours:
+          type: string
+          maxLength: 200
+          example: '8 AM - 8 PM, Mon-Sat'
+
+    AdminLoginRequest:
+      type: object
+      required:
+        - username
+        - password
+      properties:
+        username:
+          type: string
+        password:
+          type: string
+
+    RefreshTokenRequest:
+      type: object
+      required:
+        - refreshToken
+      properties:
+        refreshToken:
+          type: string
+
+    AuthResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          properties:
+            accessToken:
+              type: string
+            refreshToken:
+              type: string
+            expiresIn:
+              type: integer
+              description: Access token expiry in seconds
+            user:
+              type: object
+              properties:
+                id:
+                  type: string
+                  format: uuid
+                username:
+                  type: string
+
+    OwnerAuthResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          properties:
+            accessToken:
+              type: string
+            refreshToken:
+              type: string
+            expiresIn:
+              type: integer
+            owner:
+              $ref: '#/components/schemas/OwnerBasic'
+            plant:
+              $ref: '#/components/schemas/PlantBasic'
+
+    AdminAuthResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          properties:
+            accessToken:
+              type: string
+            refreshToken:
+              type: string
+            expiresIn:
+              type: integer
+            admin:
+              type: object
+              properties:
+                id:
+                  type: string
+                  format: uuid
+                username:
+                  type: string
+                role:
+                  type: string
+                  enum: [super_admin, admin]
+
+    # ========== Owner ==========
+    OwnerBasic:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        phone:
+          type: string
+        email:
+          type: string
+
+    OwnerProfileResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          properties:
+            owner:
+              $ref: '#/components/schemas/OwnerBasic'
+            plant:
+              $ref: '#/components/schemas/PlantBasic'
+            verificationStatus:
+              type: string
+              enum: [not_submitted, pending, approved, rejected]
+
+    OwnerProfileUpdateRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 2
+          maxLength: 100
+        email:
+          type: string
+          format: email
+
+    # ========== Plant ==========
+    PlantBasic:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        address:
+          type: string
+        verificationStatus:
+          type: string
+          enum: [unverified, pending, verified, rejected]
+        isOpen:
+          type: boolean
+
+    PlantListItem:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        tdsReading:
+          type: integer
+          nullable: true
+        pricePerLiter:
+          type: number
+          format: double
+          nullable: true
+        isOpen:
+          type: boolean
+        isVerified:
+          type: boolean
+        distance:
+          type: number
+          format: double
+          description: Distance in meters from search location
+        latitude:
+          type: number
+          format: double
+        longitude:
+          type: number
+          format: double
+
+    PlantListResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          properties:
+            plants:
+              type: array
+              items:
+                $ref: '#/components/schemas/PlantListItem'
+        meta:
+          allOf:
+            - $ref: '#/components/schemas/ResponseMeta'
+            - $ref: '#/components/schemas/PaginationMeta'
+
+    PlantDetail:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        address:
+          type: string
+        latitude:
+          type: number
+          format: double
+        longitude:
+          type: number
+          format: double
+        operatingHours:
+          type: string
+          nullable: true
+        tdsReading:
+          type: integer
+          nullable: true
+        pricePerLiter:
+          type: number
+          format: double
+          nullable: true
+        description:
+          type: string
+          nullable: true
+        photos:
+          type: array
+          items:
+            type: string
+            format: uri
+        verificationStatus:
+          type: string
+          enum: [unverified, pending, verified, rejected]
+        isVerified:
+          type: boolean
+        isOpen:
+          type: boolean
+        contact:
+          type: object
+          properties:
+            phone:
+              type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    PlantDetailResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          $ref: '#/components/schemas/PlantDetail'
+
+    PlantPublicProfile:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          properties:
+            plant:
+              $ref: '#/components/schemas/PlantDetail'
+            shareUrl:
+              type: string
+              format: uri
+            appStoreUrl:
+              type: string
+              format: uri
+            playStoreUrl:
+              type: string
+              format: uri
+
+    PlantCreateRequest:
+      type: object
+      required:
+        - name
+        - address
+        - latitude
+        - longitude
+      properties:
+        name:
+          type: string
+          minLength: 2
+          maxLength: 200
+        address:
+          type: string
+        latitude:
+          type: number
+          format: double
+        longitude:
+          type: number
+          format: double
+        operatingHours:
+          type: string
+          maxLength: 200
+        tdsReading:
+          type: integer
+          minimum: 0
+          maximum: 9999
+        pricePerLiter:
+          type: number
+          format: double
+          minimum: 0.01
+          maximum: 100
+        description:
+          type: string
+          maxLength: 1000
+
+    PlantUpdateRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 2
+          maxLength: 200
+        address:
+          type: string
+        latitude:
+          type: number
+          format: double
+        longitude:
+          type: number
+          format: double
+        operatingHours:
+          type: string
+          maxLength: 200
+        tdsReading:
+          type: integer
+          minimum: 0
+          maximum: 9999
+        pricePerLiter:
+          type: number
+          format: double
+          minimum: 0.01
+          maximum: 100
+        description:
+          type: string
+          maxLength: 1000
+
+    OwnerPlantResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          properties:
+            plant:
+              allOf:
+                - $ref: '#/components/schemas/PlantDetail'
+                - type: object
+                  properties:
+                    viewCount:
+                      type: integer
+
+    PlantAnalyticsResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          properties:
+            totalViews:
+              type: integer
+              description: All-time profile views
+            weeklyViews:
+              type: integer
+              description: Views in the last 7 days
+            viewsHistory:
+              type: array
+              items:
+                type: object
+                properties:
+                  date:
+                    type: string
+                    format: date
+                  views:
+                    type: integer
+              description: Daily views for the last 7 days
+
+    # ========== Verification ==========
+    VerificationStatusResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          properties:
+            status:
+              type: string
+              enum: [not_submitted, pending, approved, rejected]
+            currentRequest:
+              type: object
+              nullable: true
+              properties:
+                id:
+                  type: string
+                  format: uuid
+                status:
+                  type: string
+                  enum: [pending, approved, rejected]
+                submittedAt:
+                  type: string
+                  format: date-time
+                decidedAt:
+                  type: string
+                  format: date-time
+                  nullable: true
+                rejectionReason:
+                  type: string
+                  nullable: true
+
+    AdminVerificationListItem:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        ownerName:
+          type: string
+        plantName:
+          type: string
+        status:
+          type: string
+          enum: [pending, approved, rejected]
+        submittedAt:
+          type: string
+          format: date-time
+        decidedAt:
+          type: string
+          format: date-time
+          nullable: true
+
+    AdminVerificationListResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          properties:
+            requests:
+              type: array
+              items:
+                $ref: '#/components/schemas/AdminVerificationListItem'
+        meta:
+          allOf:
+            - $ref: '#/components/schemas/ResponseMeta'
+            - $ref: '#/components/schemas/PaginationMeta'
+
+    AdminVerificationDetailResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          properties:
+            request:
+              type: object
+              properties:
+                id:
+                  type: string
+                  format: uuid
+                status:
+                  type: string
+                  enum: [pending, approved, rejected]
+                submittedAt:
+                  type: string
+                  format: date-time
+                decidedAt:
+                  type: string
+                  format: date-time
+                  nullable: true
+                rejectionReason:
+                  type: string
+                  nullable: true
+                documents:
+                  type: object
+                  properties:
+                    governmentIdUrl:
+                      type: string
+                      format: uri
+                    businessRegistrationUrl:
+                      type: string
+                      format: uri
+                    fssaiLicenseUrl:
+                      type: string
+                      format: uri
+                      nullable: true
+            owner:
+              $ref: '#/components/schemas/OwnerBasic'
+            plant:
+              $ref: '#/components/schemas/PlantBasic'
+
+    # ========== Admin ==========
+    AdminDashboardResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          properties:
+            plants:
+              type: object
+              properties:
+                total:
+                  type: integer
+                verified:
+                  type: integer
+                unverified:
+                  type: integer
+                pending:
+                  type: integer
+                rejected:
+                  type: integer
+            verifications:
+              type: object
+              properties:
+                pending:
+                  type: integer
+                approvedToday:
+                  type: integer
+                rejectedToday:
+                  type: integer
+            owners:
+              type: object
+              properties:
+                total:
+                  type: integer
+                registeredToday:
+                  type: integer
+
+    AdminPlantListItem:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        ownerName:
+          type: string
+        verificationStatus:
+          type: string
+          enum: [unverified, pending, verified, rejected]
+        isOpen:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+
+    AdminPlantListResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          properties:
+            plants:
+              type: array
+              items:
+                $ref: '#/components/schemas/AdminPlantListItem'
+        meta:
+          allOf:
+            - $ref: '#/components/schemas/ResponseMeta'
+            - $ref: '#/components/schemas/PaginationMeta'
+
+    AdminPlantDetailResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          properties:
+            plant:
+              allOf:
+                - $ref: '#/components/schemas/PlantDetail'
+                - type: object
+                  properties:
+                    viewCount:
+                      type: integer
+            owner:
+              allOf:
+                - $ref: '#/components/schemas/OwnerBasic'
+                - type: object
+                  properties:
+                    createdAt:
+                      type: string
+                      format: date-time
+
+    # ========== Notifications ==========
+    Notification:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        type:
+          type: string
+          enum: [verification_approved, verification_rejected, system]
+        title:
+          type: string
+        message:
+          type: string
+        isRead:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+
+    NotificationsResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          properties:
+            notifications:
+              type: array
+              items:
+                $ref: '#/components/schemas/Notification'
+            unreadCount:
+              type: integer
+        meta:
+          allOf:
+            - $ref: '#/components/schemas/ResponseMeta'
+            - $ref: '#/components/schemas/PaginationMeta'
+
+    # ========== Chat/Messaging ==========
+    ConversationListItem:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        plantId:
+          type: string
+          format: uuid
+        plantName:
+          type: string
+        plantPhoto:
+          type: string
+          format: uri
+          nullable: true
+        otherParty:
+          type: object
+          properties:
+            id:
+              type: string
+              format: uuid
+            name:
+              type: string
+            type:
+              type: string
+              enum: [consumer, owner]
+        lastMessage:
+          type: object
+          nullable: true
+          properties:
+            content:
+              type: string
+              description: Truncated preview (first 50 chars)
+            sentAt:
+              type: string
+              format: date-time
+            isFromMe:
+              type: boolean
+        unreadCount:
+          type: integer
+        myRetention:
+          type: string
+          enum: [off, 24h, 7d, 30d]
+        effectiveRetention:
+          type: string
+          enum: [off, 24h, 7d, 30d]
+          description: Shorter of both party's settings
+        createdAt:
+          type: string
+          format: date-time
+
+    ConversationListResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          properties:
+            conversations:
+              type: array
+              items:
+                $ref: '#/components/schemas/ConversationListItem'
+        meta:
+          allOf:
+            - $ref: '#/components/schemas/ResponseMeta'
+            - $ref: '#/components/schemas/PaginationMeta'
+
+    ConversationResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          properties:
+            conversation:
+              $ref: '#/components/schemas/ConversationListItem'
+
+    ChatMessage:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        conversationId:
+          type: string
+          format: uuid
+        senderType:
+          type: string
+          enum: [consumer, owner]
+        senderId:
+          type: string
+          format: uuid
+        content:
+          type: string
+          description: Decrypted message content
+        status:
+          type: string
+          enum: [sent, delivered, read]
+        sentAt:
+          type: string
+          format: date-time
+        deliveredAt:
+          type: string
+          format: date-time
+          nullable: true
+        readAt:
+          type: string
+          format: date-time
+          nullable: true
+        isFromMe:
+          type: boolean
+        expiresAt:
+          type: string
+          format: date-time
+          nullable: true
+
+    MessageListResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          properties:
+            messages:
+              type: array
+              items:
+                $ref: '#/components/schemas/ChatMessage'
+            hasMore:
+              type: boolean
+              description: Whether there are more messages to load
+        meta:
+          $ref: '#/components/schemas/ResponseMeta'
+
+    SendMessageRequest:
+      type: object
+      required:
+        - content
+      properties:
+        content:
+          type: string
+          minLength: 1
+          maxLength: 2000
+          description: Message text content
+
+    MessageResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          properties:
+            message:
+              $ref: '#/components/schemas/ChatMessage'
+
+    # ========== WebSocket Events (Documentation) ==========
+    # Note: These are for documentation purposes. WebSocket uses ws://localhost:3000/chat
+    WebSocketClientEvents:
+      description: |
+        Events sent FROM client TO server via WebSocket.
+
+        **Connection**: `ws://localhost:3000/chat?token={JWT_ACCESS_TOKEN}`
+
+        **Format**: `{ "event": "<event_name>", "data": { ... } }`
+      type: object
+      properties:
+        message_send:
+          type: object
+          description: Send a new message
+          properties:
+            conversationId:
+              type: string
+              format: uuid
+            content:
+              type: string
+        message_read:
+          type: object
+          description: Mark message as read
+          properties:
+            conversationId:
+              type: string
+              format: uuid
+            messageId:
+              type: string
+              format: uuid
+        typing_start:
+          type: object
+          description: Start typing indicator
+          properties:
+            conversationId:
+              type: string
+              format: uuid
+        typing_stop:
+          type: object
+          description: Stop typing indicator
+          properties:
+            conversationId:
+              type: string
+              format: uuid
+
+    WebSocketServerEvents:
+      description: |
+        Events sent FROM server TO client via WebSocket.
+
+        **Format**: `{ "event": "<event_name>", "data": { ... } }`
+      type: object
+      properties:
+        message_new:
+          type: object
+          description: New message received
+          properties:
+            message:
+              $ref: '#/components/schemas/ChatMessage'
+        message_delivered:
+          type: object
+          description: Message was delivered to recipient
+          properties:
+            messageId:
+              type: string
+              format: uuid
+            deliveredAt:
+              type: string
+              format: date-time
+        message_read:
+          type: object
+          description: Message was read by recipient
+          properties:
+            messageId:
+              type: string
+              format: uuid
+            readAt:
+              type: string
+              format: date-time
+        typing_indicator:
+          type: object
+          description: Other party is typing
+          properties:
+            conversationId:
+              type: string
+              format: uuid
+            userId:
+              type: string
+              format: uuid
+            isTyping:
+              type: boolean
+        notification_new:
+          type: object
+          description: New notification (verification status, etc.)
+          properties:
+            notification:
+              $ref: '#/components/schemas/Notification'

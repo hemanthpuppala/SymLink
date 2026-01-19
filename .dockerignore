@@ -1,0 +1,54 @@
+# Git
+.git/
+.gitignore
+
+# Dependencies (rebuild in container)
+node_modules/
+.pnpm-store/
+
+# Flutter
+.dart_tool/
+.packages
+build/
+
+# IDE
+.idea/
+.vscode/
+
+# Documentation
+*.md
+!README.md
+docs/
+specs/
+
+# Testing
+coverage/
+*.test.ts
+*.spec.ts
+__tests__/
+test/
+
+# Environment (use docker secrets or env vars)
+.env
+.env.*
+!.env.example
+
+# Logs
+*.log
+logs/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Temporary
+*.tmp
+*.temp
+.cache/
+
+# TypeScript source maps (not needed in prod)
+*.map
+
+# Claude/Specify tooling
+.claude/
+.specify/
