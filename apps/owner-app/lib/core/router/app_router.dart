@@ -447,11 +447,23 @@ class _MainShellState extends State<MainShell> {
     );
   }
 
+  int _getCurrentIndex(BuildContext context) {
+    final location = GoRouterState.of(context).uri.toString();
+    if (location.startsWith('/plants')) return 1;
+    if (location.startsWith('/chat')) return 2;
+    if (location.startsWith('/profile')) return 3;
+    return 0; // Dashboard is default
+  }
+
   @override
   Widget build(BuildContext context) {
+    final currentIndex = _getCurrentIndex(context);
+
     return Scaffold(
       body: widget.child,
       bottomNavigationBar: BottomNavigationBar(
+        currentIndex: currentIndex,
+        type: BottomNavigationBarType.fixed,
         items: [
           const BottomNavigationBarItem(icon: Icon(Icons.dashboard), label: 'Dashboard'),
           const BottomNavigationBarItem(icon: Icon(Icons.water_drop), label: 'Plants'),
@@ -459,6 +471,7 @@ class _MainShellState extends State<MainShell> {
           const BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profile'),
         ],
         onTap: (index) {
+          if (index == currentIndex) return; // Don't navigate if already on this tab
           switch (index) {
             case 0:
               context.go('/dashboard');
