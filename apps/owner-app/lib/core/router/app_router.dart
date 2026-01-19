@@ -335,21 +335,113 @@ class RegisterScreen extends StatelessWidget {
   }
 }
 
-class MainShell extends StatelessWidget {
+class MainShell extends StatefulWidget {
   final Widget child;
 
   const MainShell({super.key, required this.child});
 
   @override
+  State<MainShell> createState() => _MainShellState();
+}
+
+class _MainShellState extends State<MainShell> {
+  int _totalUnreadCount = 0;
+  StreamSubscription? _messageSub;
+  StreamSubscription? _conversationSub;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadUnreadCount();
+    _setupSyncListeners();
+  }
+
+  @override
+  void dispose() {
+    _messageSub?.cancel();
+    _conversationSub?.cancel();
+    super.dispose();
+  }
+
+  void _setupSyncListeners() {
+    // Listen for new messages - reload unread count
+    _messageSub = SyncService.instance.onNewMessage.listen((_) {
+      _loadUnreadCount();
+    });
+
+    // Listen for conversation updates (e.g., marking as read)
+    _conversationSub = SyncService.instance.onConversationUpdated.listen((_) {
+      _loadUnreadCount();
+    });
+  }
+
+  Future<void> _loadUnreadCount() async {
+    try {
+      final apiClient = RepositoryProvider.of<ApiClient>(context);
+      final response = await apiClient.get('/owner/conversations');
+
+      if (response.statusCode == 200) {
+        final conversations = response.data['data'] ?? [];
+        int total = 0;
+        for (final conv in conversations) {
+          total += (conv['unreadCount'] ?? 0) as int;
+        }
+        if (mounted) {
+          setState(() {
+            _totalUnreadCount = total;
+          });
+        }
+      }
+    } catch (e) {
+      // Silently fail - unread count is not critical
+      print('[MainShell] Error loading unread count: $e');
+    }
+  }
+
+  Widget _buildChatIcon() {
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        const Icon(Icons.chat),
+        if (_totalUnreadCount > 0)
+          Positioned(
+            right: -8,
+            top: -4,
+            child: Container(
+              padding: const EdgeInsets.all(4),
+              decoration: const BoxDecoration(
+                color: Colors.red,
+                shape: BoxShape.circle,
+              ),
+              constraints: const BoxConstraints(
+                minWidth: 18,
+                minHeight: 18,
+              ),
+              child: Text(
+                _totalUnreadCount > 99 ? '99+' : _totalUnreadCount.toString(),
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 10,
+                  fontWeight: FontWeight.bold,
+                ),
+                textAlign: TextAlign.center,
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: child,
+      body: widget.child,
       bottomNavigationBar: BottomNavigationBar(
-        items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.dashboard), label: 'Dashboard'),
-          BottomNavigationBarItem(icon: Icon(Icons.water_drop), label: 'Plants'),
-          BottomNavigationBarItem(icon: Icon(Icons.chat), label: 'Chat'),
-          BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profile'),
+        items: [
+          const BottomNavigationBarItem(icon: Icon(Icons.dashboard), label: 'Dashboard'),
+          const BottomNavigationBarItem(icon: Icon(Icons.water_drop), label: 'Plants'),
+          BottomNavigationBarItem(icon: _buildChatIcon(), label: 'Chat'),
+          const BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profile'),
         ],
         onTap: (index) {
           switch (index) {
@@ -361,6 +453,8 @@ class MainShell extends StatelessWidget {
               break;
             case 2:
               context.go('/chat');
+              // Refresh unread count when entering chat
+              _loadUnreadCount();
               break;
             case 3:
               context.go('/profile');
