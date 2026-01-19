@@ -361,20 +361,69 @@ class _MainShellState extends State<MainShell> {
   int _totalUnreadCount = 0;
   StreamSubscription? _messageSub;
   StreamSubscription? _conversationSub;
+  late PageController _pageController;
+  int _currentIndex = 0;
+  bool _isPageAnimating = false;
+
+  // Cache screens to preserve state
+  final List<Widget> _screens = const [
+    HomeScreen(),
+    MapScreen(),
+    ChatListScreen(),
+    ProfileScreen(),
+  ];
 
   @override
   void initState() {
     super.initState();
+    _pageController = PageController(initialPage: 0);
     _ensureSyncConnected();
     _loadUnreadCount();
     _setupSyncListeners();
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Sync PageView with route on route changes (e.g., deep links)
+    final routeIndex = _getRouteIndex(context);
+    if (routeIndex != _currentIndex && !_isPageAnimating) {
+      _currentIndex = routeIndex;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (_pageController.hasClients && _pageController.page?.round() != routeIndex) {
+          _pageController.animateToPage(
+            routeIndex,
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeInOut,
+          );
+        }
+      });
+    }
+  }
+
+  @override
   void dispose() {
+    _pageController.dispose();
     _messageSub?.cancel();
     _conversationSub?.cancel();
     super.dispose();
+  }
+
+  int _getRouteIndex(BuildContext context) {
+    final location = GoRouterState.of(context).uri.toString();
+    if (location.startsWith('/map')) return 1;
+    if (location.startsWith('/chat')) return 2;
+    if (location.startsWith('/profile')) return 3;
+    return 0;
+  }
+
+  bool _isMainTabRoute(BuildContext context) {
+    final location = GoRouterState.of(context).uri.toString();
+    // Main tab routes (not sub-routes like /chat/:id or /plant/:id)
+    return location == '/home' ||
+        location == '/map' ||
+        location == '/chat' ||
+        location == '/profile';
   }
 
   Future<void> _ensureSyncConnected() async {
@@ -390,13 +439,11 @@ class _MainShellState extends State<MainShell> {
   }
 
   void _setupSyncListeners() {
-    // Listen for new messages - reload unread count
     _messageSub = SyncService.instance.onNewMessage.listen((data) {
       print('[MainShell] Received new message event: $data');
       _loadUnreadCount();
     });
 
-    // Listen for conversation updates (e.g., marking as read)
     _conversationSub = SyncService.instance.onConversationUpdated.listen((data) {
       print('[MainShell] Conversation updated: $data');
       _loadUnreadCount();
@@ -421,7 +468,6 @@ class _MainShellState extends State<MainShell> {
         }
       }
     } catch (e) {
-      // Silently fail - unread count is not critical
       print('[MainShell] Error loading unread count: $e');
     }
   }
@@ -460,15 +506,20 @@ class _MainShellState extends State<MainShell> {
     );
   }
 
-  int _getCurrentIndex(BuildContext context) {
-    final location = GoRouterState.of(context).uri.toString();
-    if (location.startsWith('/map')) return 1;
-    if (location.startsWith('/chat')) return 2;
-    if (location.startsWith('/profile')) return 3;
-    return 0; // Home is default
+  void _onPageChanged(int index) {
+    if (_currentIndex != index) {
+      setState(() {
+        _currentIndex = index;
+      });
+      // Update route to match page (for deep linking consistency)
+      _updateRoute(index);
+      if (index == 2) {
+        _loadUnreadCount();
+      }
+    }
   }
 
-  void _navigateToTab(int index) {
+  void _updateRoute(int index) {
     switch (index) {
       case 0:
         context.go('/home');
@@ -478,7 +529,6 @@ class _MainShellState extends State<MainShell> {
         break;
       case 2:
         context.go('/chat');
-        _loadUnreadCount();
         break;
       case 3:
         context.go('/profile');
@@ -486,33 +536,33 @@ class _MainShellState extends State<MainShell> {
     }
   }
 
-  void _onHorizontalSwipe(DragEndDetails details, int currentIndex) {
-    const swipeThreshold = 300.0; // Minimum velocity to trigger swipe
-    final velocity = details.primaryVelocity ?? 0;
-
-    if (velocity.abs() < swipeThreshold) return;
-
-    if (velocity > 0 && currentIndex > 0) {
-      // Swipe right - go to previous tab
-      _navigateToTab(currentIndex - 1);
-    } else if (velocity < 0 && currentIndex < 3) {
-      // Swipe left - go to next tab
-      _navigateToTab(currentIndex + 1);
-    }
+  void _onTabTapped(int index) {
+    if (index == _currentIndex) return;
+    _isPageAnimating = true;
+    _pageController.animateToPage(
+      index,
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeInOut,
+    ).then((_) {
+      _isPageAnimating = false;
+    });
   }
 
   @override
   Widget build(BuildContext context) {
-    final currentIndex = _getCurrentIndex(context);
+    final isMainTab = _isMainTabRoute(context);
 
     return Scaffold(
-      body: GestureDetector(
-        onHorizontalDragEnd: (details) => _onHorizontalSwipe(details, currentIndex),
-        behavior: HitTestBehavior.translucent,
-        child: widget.child,
-      ),
+      body: isMainTab
+          ? PageView(
+              controller: _pageController,
+              onPageChanged: _onPageChanged,
+              physics: const BouncingScrollPhysics(),
+              children: _screens,
+            )
+          : widget.child, // Show sub-route content (e.g., conversation detail)
       bottomNavigationBar: BottomNavigationBar(
-        currentIndex: currentIndex,
+        currentIndex: _currentIndex,
         type: BottomNavigationBarType.fixed,
         items: [
           const BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
@@ -520,10 +570,7 @@ class _MainShellState extends State<MainShell> {
           BottomNavigationBarItem(icon: _buildChatIcon(), label: 'Chat'),
           const BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profile'),
         ],
-        onTap: (index) {
-          if (index == currentIndex) return;
-          _navigateToTab(index);
-        },
+        onTap: _onTabTapped,
       ),
     );
   }
