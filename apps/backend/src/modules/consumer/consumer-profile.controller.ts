@@ -9,7 +9,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { ConsumerGuard } from '../../common/guards/consumer.guard';
-import { IsString, IsOptional, MinLength, MaxLength, Matches } from 'class-validator';
+import { IsString, IsOptional, MinLength, MaxLength, Matches, IsBoolean } from 'class-validator';
 
 class UpdateProfileDto {
   @IsString()
@@ -29,6 +29,10 @@ class UpdateProfileDto {
   @IsString()
   @IsOptional()
   phone?: string;
+
+  @IsBoolean()
+  @IsOptional()
+  readReceiptsEnabled?: boolean;
 }
 
 @Controller('v1/consumer/profile')
@@ -46,6 +50,7 @@ export class ConsumerProfileController {
         displayName: true,
         name: true,
         phone: true,
+        readReceiptsEnabled: true,
         createdAt: true,
       },
     });
@@ -72,6 +77,7 @@ export class ConsumerProfileController {
         ...(dto.name && { name: dto.name }),
         ...(dto.displayName && { displayName: dto.displayName.toLowerCase() }),
         ...(dto.phone && { phone: dto.phone }),
+        ...(dto.readReceiptsEnabled !== undefined && { readReceiptsEnabled: dto.readReceiptsEnabled }),
       },
       select: {
         id: true,
@@ -79,6 +85,7 @@ export class ConsumerProfileController {
         displayName: true,
         name: true,
         phone: true,
+        readReceiptsEnabled: true,
         createdAt: true,
       },
     });

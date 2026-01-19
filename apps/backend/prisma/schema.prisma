@@ -47,31 +47,33 @@ model Admin {
 }
 
 model Owner {
-  id            String                @id @default(uuid())
-  email         String                @unique
-  password      String
-  name          String
-  phone         String?
-  createdAt     DateTime              @default(now())
-  updatedAt     DateTime              @updatedAt
-  plants        Plant[]
-  conversations Conversation[]
-  notifications Notification[]
+  id                   String                @id @default(uuid())
+  email                String                @unique
+  password             String
+  name                 String
+  phone                String?
+  readReceiptsEnabled  Boolean               @default(true)
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @updatedAt
+  plants               Plant[]
+  conversations        Conversation[]
+  notifications        Notification[]
 
   @@map("owners")
 }
 
 model Consumer {
-  id            String         @id @default(uuid())
-  email         String         @unique
-  displayName   String         @unique  // Public username for privacy - traceable for fraud/abuse
-  password      String
-  name          String                  // Actual name (private, for internal records)
-  phone         String?
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
-  conversations Conversation[]
-  viewLogs      ViewLog[]
+  id                   String         @id @default(uuid())
+  email                String         @unique
+  displayName          String         @unique  // Public username for privacy - traceable for fraud/abuse
+  password             String
+  name                 String                  // Actual name (private, for internal records)
+  phone                String?
+  readReceiptsEnabled  Boolean        @default(true)
+  createdAt            DateTime       @default(now())
+  updatedAt            DateTime       @updatedAt
+  conversations        Conversation[]
+  viewLogs             ViewLog[]
 
   @@map("consumers")
 }

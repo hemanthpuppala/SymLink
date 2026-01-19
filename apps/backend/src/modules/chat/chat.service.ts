@@ -323,6 +323,22 @@ export class ChatService {
       throw new ForbiddenException('Access denied to this conversation');
     }
 
+    // Check if the reader has read receipts enabled
+    let readReceiptsEnabled = true;
+    if (userType === 'consumer') {
+      const consumer = await this.prisma.consumer.findUnique({
+        where: { id: userId },
+        select: { readReceiptsEnabled: true },
+      });
+      readReceiptsEnabled = consumer?.readReceiptsEnabled ?? true;
+    } else {
+      const owner = await this.prisma.owner.findUnique({
+        where: { id: userId },
+        select: { readReceiptsEnabled: true },
+      });
+      readReceiptsEnabled = owner?.readReceiptsEnabled ?? true;
+    }
+
     // Mark all messages from the other party as read
     const otherPartyType = userType === 'consumer' ? 'owner' : 'consumer';
 
@@ -333,7 +349,7 @@ export class ChatService {
         readAt: null,
       },
       data: {
-        readAt: new Date(),
+        readAt: new Date(), // Always update for internal tracking (badge counts)
       },
     });
 
@@ -345,6 +361,7 @@ export class ChatService {
         ownerId: conversation.ownerId,
         readBy: userType,
         messagesRead: result.count,
+        readReceiptsEnabled, // Only show "read" status to sender if reader has this enabled
       });
     }
   }

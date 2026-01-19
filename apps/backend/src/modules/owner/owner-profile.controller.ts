@@ -8,7 +8,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { OwnerGuard } from '../../common/guards/owner.guard';
-import { IsString, IsOptional } from 'class-validator';
+import { IsString, IsOptional, IsBoolean } from 'class-validator';
 
 class UpdateProfileDto {
   @IsString()
@@ -18,6 +18,10 @@ class UpdateProfileDto {
   @IsString()
   @IsOptional()
   phone?: string;
+
+  @IsBoolean()
+  @IsOptional()
+  readReceiptsEnabled?: boolean;
 }
 
 @Controller('v1/owner/profile')
@@ -34,6 +38,7 @@ export class OwnerProfileController {
         email: true,
         name: true,
         phone: true,
+        readReceiptsEnabled: true,
         createdAt: true,
         updatedAt: true,
         _count: {
@@ -54,12 +59,14 @@ export class OwnerProfileController {
       data: {
         ...(dto.name && { name: dto.name }),
         ...(dto.phone && { phone: dto.phone }),
+        ...(dto.readReceiptsEnabled !== undefined && { readReceiptsEnabled: dto.readReceiptsEnabled }),
       },
       select: {
         id: true,
         email: true,
         name: true,
         phone: true,
+        readReceiptsEnabled: true,
         createdAt: true,
         updatedAt: true,
       },

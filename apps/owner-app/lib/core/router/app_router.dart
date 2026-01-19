@@ -2091,6 +2091,37 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
+  Future<void> _toggleReadReceipts(bool value) async {
+    // Optimistically update UI
+    setState(() {
+      _profile?['readReceiptsEnabled'] = value;
+    });
+
+    try {
+      final apiClient = RepositoryProvider.of<ApiClient>(context);
+      final response = await apiClient.patch('/owner/profile', data: {
+        'readReceiptsEnabled': value,
+      });
+
+      if (response.statusCode == 200) {
+        final data = response.data['data'] ?? response.data;
+        setState(() {
+          _profile = data;
+        });
+      }
+    } catch (e) {
+      // Revert on error
+      setState(() {
+        _profile?['readReceiptsEnabled'] = !value;
+      });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to update: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
+
   Future<void> _logout() async {
     final storage = RepositoryProvider.of<SecureStorage>(context);
     await storage.clearAll();
@@ -2151,6 +2182,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           title: const Text('Verification'),
                           trailing: const Icon(Icons.chevron_right),
                           onTap: () => context.go('/verification'),
+                        ),
+                        const Divider(height: 1),
+                        SwitchListTile(
+                          secondary: const Icon(Icons.done_all),
+                          title: const Text('Read Receipts'),
+                          subtitle: const Text('Let customers know when you\'ve read their messages'),
+                          value: _profile?['readReceiptsEnabled'] ?? true,
+                          onChanged: (value) => _toggleReadReceipts(value),
                         ),
                         const Divider(height: 1),
                         ListTile(
