@@ -1,0 +1,172 @@
+// Prisma Schema for FlowGrid V1 Water Plant Discovery Platform
+// Database: PostgreSQL 16
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+// ============= ENUMS =============
+
+enum AdminRole {
+  SUPER_ADMIN
+  ADMIN
+  MODERATOR
+}
+
+enum RequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum NotificationType {
+  VERIFICATION_APPROVED
+  VERIFICATION_REJECTED
+  NEW_MESSAGE
+  SYSTEM
+}
+
+// ============= MODELS =============
+
+model Admin {
+  id                    String                @id @default(uuid())
+  email                 String                @unique
+  password              String
+  name                  String
+  role                  AdminRole             @default(ADMIN)
+  createdAt             DateTime              @default(now())
+  updatedAt             DateTime              @updatedAt
+  verificationDecisions VerificationRequest[]
+
+  @@map("admins")
+}
+
+model Owner {
+  id            String                @id @default(uuid())
+  email         String                @unique
+  password      String
+  name          String
+  phone         String?
+  createdAt     DateTime              @default(now())
+  updatedAt     DateTime              @updatedAt
+  plants        Plant[]
+  conversations Conversation[]
+  notifications Notification[]
+
+  @@map("owners")
+}
+
+model Consumer {
+  id            String         @id @default(uuid())
+  email         String         @unique
+  displayName   String         @unique  // Public username for privacy - traceable for fraud/abuse
+  password      String
+  name          String                  // Actual name (private, for internal records)
+  phone         String?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  conversations Conversation[]
+  viewLogs      ViewLog[]
+
+  @@map("consumers")
+}
+
+model Plant {
+  id                   String                @id @default(uuid())
+  ownerId              String
+  name                 String
+  address              String
+  latitude             Float
+  longitude            Float
+  phone                String?
+  description          String?
+  tdsLevel             Int?
+  pricePerLiter        Float?
+  operatingHours       String?
+  photos               String                @default("[]") // JSON array
+  isVerified           Boolean               @default(false)
+  isActive             Boolean               @default(true)
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @updatedAt
+  owner                Owner                 @relation(fields: [ownerId], references: [id])
+  verificationRequests VerificationRequest[]
+  viewLogs             ViewLog[]
+  conversations        Conversation[]
+
+  @@map("plants")
+}
+
+model VerificationRequest {
+  id              String        @id @default(uuid())
+  plantId         String
+  documents       String        @default("[]") // JSON array
+  notes           String?
+  status          RequestStatus @default(PENDING)
+  rejectionReason String?
+  createdAt       DateTime      @default(now())
+  reviewedAt      DateTime?
+  reviewerId      String?
+  plant           Plant         @relation(fields: [plantId], references: [id])
+  reviewer        Admin?        @relation(fields: [reviewerId], references: [id])
+
+  @@map("verification_requests")
+}
+
+model ViewLog {
+  id         String   @id @default(uuid())
+  plantId    String
+  consumerId String?
+  viewedAt   DateTime @default(now())
+  plant      Plant    @relation(fields: [plantId], references: [id])
+  consumer   Consumer? @relation(fields: [consumerId], references: [id])
+
+  @@map("view_logs")
+}
+
+model Conversation {
+  id            String    @id @default(uuid())
+  consumerId    String
+  ownerId       String
+  plantId       String
+  lastMessageAt DateTime?
+  createdAt     DateTime  @default(now())
+  consumer      Consumer  @relation(fields: [consumerId], references: [id])
+  owner         Owner     @relation(fields: [ownerId], references: [id])
+  plant         Plant     @relation(fields: [plantId], references: [id])
+  messages      Message[]
+
+  @@unique([consumerId, plantId])
+  @@map("conversations")
+}
+
+model Message {
+  id             String       @id @default(uuid())
+  conversationId String
+  senderType     String       // 'consumer' or 'owner'
+  senderId       String
+  content        String
+  sentAt         DateTime     @default(now())
+  deliveredAt    DateTime?
+  readAt         DateTime?
+  conversation   Conversation @relation(fields: [conversationId], references: [id])
+
+  @@map("messages")
+}
+
+model Notification {
+  id        String           @id @default(uuid())
+  ownerId   String
+  type      NotificationType
+  title     String
+  message   String
+  isRead    Boolean          @default(false)
+  createdAt DateTime         @default(now())
+  owner     Owner            @relation(fields: [ownerId], references: [id])
+
+  @@map("notifications")
+}
