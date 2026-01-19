@@ -74,7 +74,7 @@ Based on plan.md structure:
 ### Admin Dashboard Core Infrastructure
 
 - [x] T029 [P] Create API client with fetch in apps/admin/src/lib/api.ts
-- [ ] T030 [P] Configure TanStack Query provider in apps/admin/src/app/providers.tsx
+- [x] T030 [P] Configure TanStack Query provider in apps/admin/src/app/providers.tsx
 - [x] T031 [P] Create auth context and hook in apps/admin/src/lib/auth.ts
 - [x] T032 Create login page at apps/admin/src/app/auth/login/page.tsx
 - [x] T033 Create dashboard layout with sidebar in apps/admin/src/components/layout/
@@ -99,8 +99,8 @@ Based on plan.md structure:
 - [x] T039 [US2] Implement GET/PATCH /v1/owner/profile in apps/backend/src/modules/owner/owner-profile.controller.ts
 - [x] T040 [US2] Implement plant CRUD GET/POST/PATCH /v1/owner/plant in apps/backend/src/modules/owner/owner-plant.controller.ts
 - [x] T041 [US2] Implement plant status toggle PATCH /v1/owner/plant/status in apps/backend/src/modules/owner/owner-plant.controller.ts
-- [ ] T042 [US2] Implement photo upload POST /v1/owner/plant/photos with storage
-- [ ] T043 [US2] Implement photo delete DELETE /v1/owner/plant/photos
+- [x] T042 [US2] Implement photo upload POST /v1/owner/plant/photos with storage
+- [x] T043 [US2] Implement photo delete DELETE /v1/owner/plant/photos
 - [x] T044 [US2] Implement verification submission POST /v1/owner/verification in apps/backend/src/modules/owner/owner-verification.controller.ts
 - [x] T045 [US2] Implement verification status GET /v1/owner/verification in apps/backend/src/modules/owner/owner-verification.controller.ts
 - [x] T046 [US2] Implement notifications list GET /v1/owner/notifications in apps/backend/src/modules/owner/owner-notifications.controller.ts
@@ -109,18 +109,18 @@ Based on plan.md structure:
 ### Owner App Implementation for US2
 
 - [x] T048 [US2] Create auth feature module in apps/owner-app/lib/features/auth/
-- [ ] T049 [US2] Implement AuthBloc with login/register states
+- [x] T049 [US2] Implement AuthBloc with login/register states
 - [x] T050 [US2] Create registration screen with form validation in apps/owner-app/lib/core/router/app_router.dart
 - [x] T051 [US2] Create login screen in apps/owner-app/lib/core/router/app_router.dart
 - [x] T052 [US2] Create dashboard feature module in apps/owner-app/lib/features/dashboard/
-- [ ] T053 [US2] Implement DashboardBloc
+- [x] T053 [US2] Implement DashboardBloc
 - [x] T054 [US2] Create main dashboard screen with plant info in apps/owner-app/lib/features/dashboard/screens/dashboard_screen.dart
 - [x] T055 [US2] Create plant_profile feature module in apps/owner-app/lib/features/plant_profile/
-- [ ] T056 [US2] Implement PlantProfileBloc
+- [x] T056 [US2] Implement PlantProfileBloc
 - [x] T057 [US2] Create plant form screen with TDS/price/hours in apps/owner-app/lib/features/plant_profile/screens/plant_form_screen.dart
 - [ ] T058 [US2] Create photo manager widget with upload
 - [x] T059 [US2] Create documents feature module in apps/owner-app/lib/features/documents/
-- [ ] T060 [US2] Implement DocumentsBloc
+- [x] T060 [US2] Implement DocumentsBloc
 - [x] T061 [US2] Create verification screen in apps/owner-app/lib/features/documents/screens/verification_screen.dart
 - [ ] T062 [US2] Create verification status widget
 - [ ] T063 [US2] Create notifications feature module
@@ -159,9 +159,9 @@ Based on plan.md structure:
 - [x] T078 [US1] Create map screen in apps/consumer-app/lib/features/plants/screens/map_screen.dart
 - [x] T079 [US1] Create plant card widget in apps/consumer-app/lib/features/plants/widgets/plant_card.dart
 - [x] T080 [US1] Create home screen with plant list in apps/consumer-app/lib/features/plants/screens/home_screen.dart
-- [ ] T081 [US1] Implement directions button (launch external maps)
-- [ ] T082 [US1] Implement location permission flow
-- [ ] T083 [US1] Create manual location entry dialog
+- [x] T081 [US1] Implement directions button (launch external maps)
+- [x] T082 [US1] Implement location permission flow
+- [x] T083 [US1] Create manual location entry dialog
 - [x] T084 [US1] Handle empty state in plant list
 
 **Checkpoint**: Consumer can login, view plant list/map, see plant details ✅
@@ -184,8 +184,8 @@ Based on plan.md structure:
 - [x] T090 [US3] Implement verification details GET /v1/admin/verification-requests/{id}
 - [x] T091 [US3] Implement approve/reject PATCH /v1/admin/verification-requests/{id} in apps/backend/src/modules/admin/admin-verification.controller.ts
 - [x] T092 [US3] Create notification on verification decision
-- [ ] T093 [US3] Implement plants list GET /v1/admin/plants
-- [ ] T094 [US3] Implement plant details GET /v1/admin/plants/{id}
+- [x] T093 [US3] Implement plants list GET /v1/admin/plants
+- [x] T094 [US3] Implement plant details GET /v1/admin/plants/{id}
 
 ### Admin Dashboard Implementation for US3
 
@@ -194,7 +194,7 @@ Based on plan.md structure:
 - [ ] T097 [US3] Create verification detail page with document viewer
 - [x] T098 [US3] Create approve/reject actions in verification page
 - [x] T099 [US3] Create plants list page at apps/admin/src/app/plants/page.tsx
-- [ ] T100 [US3] Create plant detail page
+- [x] T100 [US3] Create plant detail page
 - [x] T101 [US3] Implement real-time WebSocket updates for new verifications
 
 **Checkpoint**: Admin can login, view dashboard stats, review verifications, approve/reject ✅
@@ -302,7 +302,7 @@ Based on plan.md structure:
 - [x] T158 [US9] Implement message status indicators
 - [x] T159 [US9] Add Chats tab to bottom navigation
 - [ ] T160 [US9] Create retention settings screen
-- [ ] T161 [US9] Add unread message badge to dashboard
+- [x] T161 [US9] Add unread message badge to dashboard
 
 **Checkpoint**: Consumer and Owner can chat in real-time, see message status ✅
 

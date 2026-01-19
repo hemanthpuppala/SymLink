@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:socket_io_client/socket_io_client.dart' as IO;
+import 'package:url_launcher/url_launcher.dart';
 import '../api/api_client.dart';
 import '../storage/secure_storage.dart';
 import '../sync/sync_service.dart';
@@ -871,14 +872,346 @@ class _MapScreenState extends State<MapScreen> {
   }
 }
 
-class PlantDetailsScreen extends StatelessWidget {
+class PlantDetailsScreen extends StatefulWidget {
   final String plantId;
 
   const PlantDetailsScreen({super.key, required this.plantId});
 
   @override
+  State<PlantDetailsScreen> createState() => _PlantDetailsScreenState();
+}
+
+class _PlantDetailsScreenState extends State<PlantDetailsScreen> {
+  Map<String, dynamic>? _plant;
+  bool _isLoading = true;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadPlantDetails();
+  }
+
+  Future<void> _loadPlantDetails() async {
+    try {
+      final apiClient = RepositoryProvider.of<ApiClient>(context);
+      final response = await apiClient.get('/consumer/plants/${widget.plantId}');
+
+      if (response.statusCode == 200) {
+        setState(() {
+          _plant = response.data['data'] ?? response.data;
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      setState(() {
+        _error = e.toString();
+        _isLoading = false;
+      });
+    }
+  }
+
+  Future<void> _openDirections() async {
+    if (_plant == null) return;
+
+    final lat = (_plant!['latitude'] as num?)?.toDouble();
+    final lng = (_plant!['longitude'] as num?)?.toDouble();
+
+    if (lat == null || lng == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Location not available'), backgroundColor: Colors.red),
+      );
+      return;
+    }
+
+    final googleMapsUrl = Uri.parse(
+      'https://www.google.com/maps/dir/?api=1&destination=$lat,$lng',
+    );
+
+    try {
+      await launchUrl(googleMapsUrl, mode: LaunchMode.externalApplication);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not open maps: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
+
+  Future<void> _callPhone() async {
+    final phone = _plant?['phone'] ?? _plant?['ownerPhone'];
+    if (phone == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Phone number not available'), backgroundColor: Colors.red),
+      );
+      return;
+    }
+
+    final uri = Uri.parse('tel:$phone');
+    try {
+      await launchUrl(uri);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not call: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
+
+  Future<void> _startChat() async {
+    try {
+      final apiClient = RepositoryProvider.of<ApiClient>(context);
+      final response = await apiClient.get('/consumer/conversations/plant/${widget.plantId}');
+      if (response.statusCode == 200 && mounted) {
+        final conversation = response.data['data'];
+        context.push('/chat/${conversation['id']}');
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error starting chat: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
+
+  Widget _buildInfoRow(IconData icon, String label, String? value, {Color? iconColor}) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Row(
+        children: [
+          Icon(icon, size: 20, color: iconColor ?? Colors.grey),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(label, style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                Text(value ?? 'Not specified', style: const TextStyle(fontSize: 15)),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return Center(child: Text('Plant Details: $plantId'));
+    if (_isLoading) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Plant Details')),
+        body: const Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    if (_error != null || _plant == null) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Plant Details')),
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.error_outline, size: 64, color: Colors.red),
+              const SizedBox(height: 16),
+              Text('Error: ${_error ?? "Plant not found"}'),
+              const SizedBox(height: 16),
+              ElevatedButton(
+                onPressed: () {
+                  setState(() => _isLoading = true);
+                  _loadPlantDetails();
+                },
+                child: const Text('Retry'),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    final isVerified = _plant!['isVerified'] == true || _plant!['verificationStatus'] == 'verified';
+    final isOpen = _plant!['isActive'] == true || _plant!['isOpen'] == true;
+
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(_plant!['name'] ?? 'Plant Details'),
+        actions: [
+          if (isVerified)
+            const Padding(
+              padding: EdgeInsets.only(right: 16),
+              child: Icon(Icons.verified, color: Colors.green),
+            ),
+        ],
+      ),
+      body: RefreshIndicator(
+        onRefresh: _loadPlantDetails,
+        child: SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // Photos section (placeholder for now)
+              Container(
+                height: 200,
+                color: Colors.grey.shade200,
+                child: _plant!['photos'] != null && (_plant!['photos'] as List).isNotEmpty
+                    ? Image.network(
+                        _plant!['photos'][0],
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) => const Center(
+                          child: Icon(Icons.water_drop, size: 80, color: Colors.blue),
+                        ),
+                      )
+                    : const Center(
+                        child: Icon(Icons.water_drop, size: 80, color: Colors.blue),
+                      ),
+              ),
+
+              // Status banner
+              Container(
+                padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+                color: isOpen ? Colors.green.shade100 : Colors.red.shade100,
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      isOpen ? Icons.check_circle : Icons.cancel,
+                      size: 18,
+                      color: isOpen ? Colors.green : Colors.red,
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      isOpen ? 'Currently Open' : 'Currently Closed',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: isOpen ? Colors.green.shade800 : Colors.red.shade800,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              // Plant details
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Name and verification badge
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            _plant!['name'] ?? 'Unknown Plant',
+                            style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+                          ),
+                        ),
+                        if (isVerified)
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: Colors.green,
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: const Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.verified, size: 14, color: Colors.white),
+                                SizedBox(width: 4),
+                                Text('Verified', style: TextStyle(color: Colors.white, fontSize: 12)),
+                              ],
+                            ),
+                          ),
+                      ],
+                    ),
+
+                    const SizedBox(height: 16),
+                    const Divider(),
+
+                    // Info rows
+                    _buildInfoRow(Icons.location_on, 'Address', _plant!['address']),
+                    _buildInfoRow(Icons.access_time, 'Operating Hours', _plant!['operatingHours']),
+                    _buildInfoRow(Icons.science, 'TDS Level',
+                      _plant!['tdsLevel'] != null || _plant!['tdsReading'] != null
+                        ? '${_plant!['tdsLevel'] ?? _plant!['tdsReading']} ppm'
+                        : null,
+                      iconColor: Colors.blue,
+                    ),
+                    _buildInfoRow(Icons.currency_rupee, 'Price',
+                      _plant!['pricePerLiter'] != null
+                        ? 'Rs. ${_plant!['pricePerLiter']}/L'
+                        : null,
+                      iconColor: Colors.green,
+                    ),
+                    if (_plant!['phone'] != null || _plant!['ownerPhone'] != null)
+                      _buildInfoRow(Icons.phone, 'Contact', _plant!['phone'] ?? _plant!['ownerPhone']),
+
+                    if (_plant!['description'] != null) ...[
+                      const SizedBox(height: 16),
+                      const Divider(),
+                      const SizedBox(height: 8),
+                      const Text('Description', style: TextStyle(fontWeight: FontWeight.bold)),
+                      const SizedBox(height: 8),
+                      Text(_plant!['description']),
+                    ],
+
+                    const SizedBox(height: 24),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+      bottomNavigationBar: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            children: [
+              // Directions button
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: _openDirections,
+                  icon: const Icon(Icons.directions),
+                  label: const Text('Directions'),
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              // Call button
+              if (_plant!['phone'] != null || _plant!['ownerPhone'] != null)
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: _callPhone,
+                    icon: const Icon(Icons.phone),
+                    label: const Text('Call'),
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                    ),
+                  ),
+                ),
+              if (_plant!['phone'] != null || _plant!['ownerPhone'] != null)
+                const SizedBox(width: 8),
+              // Message button
+              Expanded(
+                child: ElevatedButton.icon(
+                  onPressed: _startChat,
+                  icon: const Icon(Icons.message),
+                  label: const Text('Message'),
+                  style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }
 
