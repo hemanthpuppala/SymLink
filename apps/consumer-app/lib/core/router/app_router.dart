@@ -15,9 +15,46 @@ class AppRouter {
   static final _rootNavigatorKey = GlobalKey<NavigatorState>();
   static final _shellNavigatorKey = GlobalKey<NavigatorState>();
   static SecureStorage? _storage;
+  static int _previousTabIndex = 0;
+  static int _currentTabIndex = 0;
 
   static void setStorage(SecureStorage storage) {
     _storage = storage;
+  }
+
+  // Get tab index from route path
+  static int _getTabIndex(String path) {
+    if (path.startsWith('/map')) return 1;
+    if (path.startsWith('/chat')) return 2;
+    if (path.startsWith('/profile')) return 3;
+    return 0; // Home and others default to 0
+  }
+
+  // Custom page with directional slide transition
+  static Page<dynamic> _buildTabPage(Widget child, GoRouterState state) {
+    final newIndex = _getTabIndex(state.matchedLocation);
+    final slideFromRight = newIndex > _previousTabIndex;
+
+    // Update indices for next navigation
+    _previousTabIndex = _currentTabIndex;
+    _currentTabIndex = newIndex;
+
+    return CustomTransitionPage(
+      key: state.pageKey,
+      child: child,
+      transitionDuration: const Duration(milliseconds: 250),
+      reverseTransitionDuration: const Duration(milliseconds: 250),
+      transitionsBuilder: (context, animation, secondaryAnimation, child) {
+        final begin = Offset(slideFromRight ? 1.0 : -1.0, 0.0);
+        const end = Offset.zero;
+        final tween = Tween(begin: begin, end: end).chain(CurveTween(curve: Curves.easeInOut));
+
+        return SlideTransition(
+          position: animation.drive(tween),
+          child: child,
+        );
+      },
+    );
   }
 
   static GoRouter get router => _router;
@@ -67,38 +104,38 @@ class AppRouter {
           GoRoute(
             path: '/home',
             name: 'home',
-            builder: (context, state) => const HomeScreen(),
+            pageBuilder: (context, state) => _buildTabPage(const HomeScreen(), state),
           ),
           GoRoute(
             path: '/map',
             name: 'map',
-            builder: (context, state) => const MapScreen(),
+            pageBuilder: (context, state) => _buildTabPage(const MapScreen(), state),
           ),
           GoRoute(
             path: '/plants/:id',
             name: 'plant-details',
-            builder: (context, state) {
+            pageBuilder: (context, state) {
               final plantId = state.pathParameters['id']!;
-              return PlantDetailsScreen(plantId: plantId);
+              return _buildTabPage(PlantDetailsScreen(plantId: plantId), state);
             },
           ),
           GoRoute(
             path: '/chat',
             name: 'chat-list',
-            builder: (context, state) => const ChatListScreen(),
+            pageBuilder: (context, state) => _buildTabPage(const ChatListScreen(), state),
           ),
           GoRoute(
             path: '/chat/:id',
             name: 'chat',
-            builder: (context, state) {
+            pageBuilder: (context, state) {
               final conversationId = state.pathParameters['id']!;
-              return ChatScreen(conversationId: conversationId);
+              return _buildTabPage(ChatScreen(conversationId: conversationId), state);
             },
           ),
           GoRoute(
             path: '/profile',
             name: 'profile',
-            builder: (context, state) => const ProfileScreen(),
+            pageBuilder: (context, state) => _buildTabPage(const ProfileScreen(), state),
           ),
         ],
       ),
