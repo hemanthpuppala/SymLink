@@ -494,12 +494,49 @@ class _MainShellState extends State<MainShell> {
     return 0; // Dashboard is default
   }
 
+  void _navigateToTab(int index) {
+    switch (index) {
+      case 0:
+        context.go('/dashboard');
+        break;
+      case 1:
+        context.go('/plants');
+        break;
+      case 2:
+        context.go('/chat');
+        _loadUnreadCount();
+        break;
+      case 3:
+        context.go('/profile');
+        break;
+    }
+  }
+
+  void _onHorizontalSwipe(DragEndDetails details, int currentIndex) {
+    const swipeThreshold = 300.0; // Minimum velocity to trigger swipe
+    final velocity = details.primaryVelocity ?? 0;
+
+    if (velocity.abs() < swipeThreshold) return;
+
+    if (velocity > 0 && currentIndex > 0) {
+      // Swipe right - go to previous tab
+      _navigateToTab(currentIndex - 1);
+    } else if (velocity < 0 && currentIndex < 3) {
+      // Swipe left - go to next tab
+      _navigateToTab(currentIndex + 1);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final currentIndex = _getCurrentIndex(context);
 
     return Scaffold(
-      body: widget.child,
+      body: GestureDetector(
+        onHorizontalDragEnd: (details) => _onHorizontalSwipe(details, currentIndex),
+        behavior: HitTestBehavior.translucent,
+        child: widget.child,
+      ),
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: currentIndex,
         type: BottomNavigationBarType.fixed,
@@ -510,23 +547,8 @@ class _MainShellState extends State<MainShell> {
           const BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profile'),
         ],
         onTap: (index) {
-          if (index == currentIndex) return; // Don't navigate if already on this tab
-          switch (index) {
-            case 0:
-              context.go('/dashboard');
-              break;
-            case 1:
-              context.go('/plants');
-              break;
-            case 2:
-              context.go('/chat');
-              // Refresh unread count when entering chat
-              _loadUnreadCount();
-              break;
-            case 3:
-              context.go('/profile');
-              break;
-          }
+          if (index == currentIndex) return;
+          _navigateToTab(index);
         },
       ),
     );
