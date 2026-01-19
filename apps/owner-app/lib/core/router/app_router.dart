@@ -1866,7 +1866,6 @@ class _ChatScreenState extends State<ChatScreen> {
                           final message = _messages[index];
                           final isMe = message['senderType'] == 'owner';
                           final primaryColor = Theme.of(context).colorScheme.primary;
-                          final surfaceVariant = Theme.of(context).colorScheme.surfaceContainerHighest;
 
                           return Align(
                             alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
@@ -1878,7 +1877,7 @@ class _ChatScreenState extends State<ChatScreen> {
                               ),
                               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                               decoration: BoxDecoration(
-                                color: isMe ? primaryColor : surfaceVariant,
+                                color: isMe ? primaryColor : Colors.white,
                                 borderRadius: BorderRadius.only(
                                   topLeft: const Radius.circular(18),
                                   topRight: const Radius.circular(18),
@@ -1892,7 +1891,7 @@ class _ChatScreenState extends State<ChatScreen> {
                                   Text(
                                     message['content'] ?? '',
                                     style: TextStyle(
-                                      color: isMe ? Colors.white : Theme.of(context).colorScheme.onSurface,
+                                      color: isMe ? Colors.white : Colors.black87,
                                       fontSize: 15,
                                     ),
                                   ),
@@ -1904,7 +1903,7 @@ class _ChatScreenState extends State<ChatScreen> {
                                         _formatMessageTime(message['sentAt']),
                                         style: TextStyle(
                                           fontSize: 11,
-                                          color: isMe ? Colors.white70 : Theme.of(context).colorScheme.onSurfaceVariant,
+                                          color: isMe ? Colors.white70 : Colors.grey,
                                         ),
                                       ),
                                       if (isMe) ...[
