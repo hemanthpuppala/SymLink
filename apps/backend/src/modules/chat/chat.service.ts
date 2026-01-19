@@ -116,6 +116,16 @@ export class ChatService {
           plantId,
         },
       });
+
+      // Notify admins of new conversation
+      this.syncGateway.notifyConversationCreated({
+        id: conversation.id,
+        consumerId,
+        ownerId: plant.ownerId,
+        plantId,
+        plantName: plant.name,
+        ownerName: plant.owner.name,
+      });
     }
 
     const unreadCount = await this.prisma.message.count({
@@ -235,6 +245,13 @@ export class ChatService {
     };
   }
 
+  /**
+   * Send a message in a conversation.
+   *
+   * IMPORTANT: Message delivery is UNCONDITIONAL and NEVER checks readReceiptsEnabled.
+   * Read receipt settings only control whether the sender sees "read" indicators,
+   * NOT whether messages are delivered. Messages must ALWAYS be delivered to the recipient.
+   */
   async sendMessage(
     conversationId: string,
     userId: string,
@@ -341,28 +358,80 @@ export class ChatService {
 
     // Mark all messages from the other party as read
     const otherPartyType = userType === 'consumer' ? 'owner' : 'consumer';
+    const readAt = new Date();
 
-    const result = await this.prisma.message.updateMany({
+    console.log(`[ChatService] markAsRead: conversationId=${conversationId}, userType=${userType}, otherPartyType=${otherPartyType}`);
+
+    // Get the unread message IDs first (for emitting read receipts)
+    const unreadMessages = await this.prisma.message.findMany({
       where: {
         conversationId,
         senderType: otherPartyType,
         readAt: null,
       },
+      select: { id: true },
+    });
+
+    console.log(`[ChatService] Found ${unreadMessages.length} unread messages from ${otherPartyType}`);
+
+    if (unreadMessages.length === 0) {
+      console.log('[ChatService] No unread messages to mark as read');
+      return;
+    }
+
+    const messageIds = unreadMessages.map((m) => m.id);
+    console.log(`[ChatService] Message IDs to mark as read: ${messageIds.join(', ')}`);
+
+    // Update all unread messages
+    await this.prisma.message.updateMany({
+      where: {
+        id: { in: messageIds },
+      },
       data: {
-        readAt: new Date(), // Always update for internal tracking (badge counts)
+        readAt, // Always update for internal tracking (badge counts)
       },
     });
 
     // Notify both parties that conversation was updated (for badge refresh)
-    if (result.count > 0) {
-      this.syncGateway.notifyConversationUpdated({
-        id: conversationId,
+    this.syncGateway.notifyConversationUpdated({
+      id: conversationId,
+      consumerId: conversation.consumerId,
+      ownerId: conversation.ownerId,
+      readBy: userType,
+      messagesRead: messageIds.length,
+      readReceiptsEnabled, // Only show "read" status to sender if reader has this enabled
+    });
+
+    // IMPORTANT: readReceiptsEnabled controls whether the OTHER USER sees the "read" indicator.
+    // It should NEVER affect message delivery - messages must always be delivered regardless.
+    // The readAt timestamp is ALWAYS saved in DB (for internal tracking like badge counts).
+    // We only skip emitting the WebSocket event to the sender if reader disabled read receipts.
+
+    console.log(`[ChatService] readReceiptsEnabled=${readReceiptsEnabled}`);
+
+    // Always notify admins about read events (admins have full observability)
+    this.syncGateway.notifyMessagesReadToAdmin({
+      conversationId,
+      messageIds,
+      readAt: readAt.toISOString(),
+      consumerId: conversation.consumerId,
+      ownerId: conversation.ownerId,
+      readBy: userType,
+    });
+
+    // Only emit to the sender if the reader has read receipts enabled
+    if (readReceiptsEnabled) {
+      console.log(`[ChatService] Emitting notifyMessagesRead for ${messageIds.length} messages`);
+      this.syncGateway.notifyMessagesRead({
+        conversationId,
+        messageIds,
+        readAt: readAt.toISOString(),
         consumerId: conversation.consumerId,
         ownerId: conversation.ownerId,
         readBy: userType,
-        messagesRead: result.count,
-        readReceiptsEnabled, // Only show "read" status to sender if reader has this enabled
       });
+    } else {
+      console.log('[ChatService] Read receipts disabled for user, not emitting to sender');
     }
   }
 

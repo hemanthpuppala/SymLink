@@ -20,12 +20,24 @@ export class AdminDashboardController {
       totalOwners,
       totalConsumers,
       pendingVerifications,
+      totalConversations,
+      totalMessages,
+      messagesLast24h,
+      unreadMessages,
     ] = await Promise.all([
       this.prisma.plant.count(),
       this.prisma.plant.count({ where: { isVerified: true } }),
       this.prisma.owner.count(),
       this.prisma.consumer.count(),
       this.prisma.verificationRequest.count({ where: { status: 'PENDING' } }),
+      this.prisma.conversation.count(),
+      this.prisma.message.count(),
+      this.prisma.message.count({
+        where: {
+          sentAt: { gte: new Date(Date.now() - 24 * 60 * 60 * 1000) },
+        },
+      }),
+      this.prisma.message.count({ where: { readAt: null } }),
     ]);
 
     return {
@@ -35,6 +47,12 @@ export class AdminDashboardController {
       totalOwners,
       totalConsumers,
       pendingVerifications,
+      chat: {
+        totalConversations,
+        totalMessages,
+        messagesLast24h,
+        unreadMessages,
+      },
     };
   }
 

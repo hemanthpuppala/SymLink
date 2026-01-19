@@ -1,6 +1,39 @@
 'use client';
 
-import { useEffect, useRef, useCallback } from 'react';
+/**
+ * REAL-TIME SYNC SERVICE - WebSocket-based updates
+ *
+ * IMPORTANT: Auto-refresh should ALWAYS use WebSocket (push-based), NOT polling.
+ *
+ * WHY WebSocket over Polling:
+ * - Instant updates: Data appears immediately when events occur
+ * - Efficient: No unnecessary network requests when nothing changed
+ * - Scalable: Server pushes only when needed, not on fixed intervals
+ * - Battery-friendly: No constant polling draining device resources
+ *
+ * HOW TO USE:
+ * 1. Import the appropriate hook (useSync, useSyncRefresh, or useChatSync)
+ * 2. Pass handlers for events you want to listen to
+ * 3. In handlers, invalidate React Query cache to trigger re-fetch
+ *
+ * EXAMPLE:
+ * ```tsx
+ * const queryClient = useQueryClient();
+ * const refreshData = useCallback(() => {
+ *   queryClient.invalidateQueries({ queryKey: ['my-data'] });
+ * }, [queryClient]);
+ *
+ * useChatSync({
+ *   onNewMessage: refreshData,
+ *   onConversationUpdated: refreshData,
+ * });
+ * ```
+ *
+ * DO NOT use refetchInterval for auto-refresh - that's polling!
+ * ALWAYS prefer WebSocket events for real-time updates.
+ */
+
+import { useEffect, useRef } from 'react';
 import { io, Socket } from 'socket.io-client';
 
 type SyncEventType =
@@ -9,9 +42,13 @@ type SyncEventType =
   | 'plant:created'
   | 'plant:updated'
   | 'plant:deleted'
+  | 'chat:message'
+  | 'chat:created'
+  | 'chat:updated'
+  | 'chat:read'
   | 'data:refresh';
 
-type SyncHandler = (data: any) => void;
+type SyncHandler = (data: unknown) => void;
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
 
@@ -23,7 +60,7 @@ export function useSync(events: { event: SyncEventType; handler: SyncHandler }[]
     if (!token) return;
 
     // Connect to sync namespace
-    const socket = io(`${API_URL}/sync`, {
+    const socket = io(`${API_URL.replace('/v1', '')}/sync`, {
       auth: { token },
       transports: ['websocket'],
       reconnection: true,
@@ -61,7 +98,7 @@ export function useSync(events: { event: SyncEventType; handler: SyncHandler }[]
   return socketRef.current;
 }
 
-// Hook for auto-refreshing data
+// Hook for auto-refreshing data via WebSocket
 export function useSyncRefresh(onRefresh: () => void, eventTypes: SyncEventType[]) {
   const events = eventTypes.map(event => ({
     event,
@@ -70,6 +107,31 @@ export function useSyncRefresh(onRefresh: () => void, eventTypes: SyncEventType[
       onRefresh();
     },
   }));
+
+  useSync(events);
+}
+
+// Hook specifically for chat real-time updates
+export function useChatSync(handlers: {
+  onNewMessage?: (data: unknown) => void;
+  onConversationCreated?: (data: unknown) => void;
+  onConversationUpdated?: (data: unknown) => void;
+  onMessagesRead?: (data: unknown) => void;
+}) {
+  const events: { event: SyncEventType; handler: SyncHandler }[] = [];
+
+  if (handlers.onNewMessage) {
+    events.push({ event: 'chat:message', handler: handlers.onNewMessage });
+  }
+  if (handlers.onConversationCreated) {
+    events.push({ event: 'chat:created', handler: handlers.onConversationCreated });
+  }
+  if (handlers.onConversationUpdated) {
+    events.push({ event: 'chat:updated', handler: handlers.onConversationUpdated });
+  }
+  if (handlers.onMessagesRead) {
+    events.push({ event: 'chat:read', handler: handlers.onMessagesRead });
+  }
 
   useSync(events);
 }

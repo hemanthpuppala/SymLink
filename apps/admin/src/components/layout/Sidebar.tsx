@@ -8,7 +8,8 @@ import {
   UserGroupIcon,
   ShieldCheckIcon,
   Cog6ToothIcon,
-  ArrowRightOnRectangleIcon
+  ArrowRightOnRectangleIcon,
+  ChatBubbleLeftRightIcon,
 } from '@heroicons/react/24/outline';
 import { logout } from '@/lib/auth';
 
@@ -16,6 +17,7 @@ const navigation = [
   { name: 'Dashboard', href: '/dashboard', icon: HomeIcon },
   { name: 'Plants', href: '/plants', icon: BuildingOffice2Icon },
   { name: 'Owners', href: '/owners', icon: UserGroupIcon },
+  { name: 'Chats', href: '/chats', icon: ChatBubbleLeftRightIcon },
   { name: 'Verification', href: '/verification', icon: ShieldCheckIcon },
   { name: 'Settings', href: '/settings', icon: Cog6ToothIcon },
 ];

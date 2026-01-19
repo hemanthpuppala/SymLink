@@ -1,3 +1,29 @@
+/**
+ * SYNC GATEWAY - Real-time WebSocket-based event broadcasting
+ *
+ * IMPORTANT METHODOLOGY - Auto-refresh should ALWAYS use WebSocket, NOT polling:
+ *
+ * WHY WebSocket (Push-based) over Polling:
+ * - Instant: Updates appear immediately when events occur on the server
+ * - Efficient: No wasted requests when nothing has changed
+ * - Scalable: Server controls when to push, clients don't hammer the API
+ * - Battery-friendly: Mobile devices don't drain battery with constant polling
+ *
+ * HOW IT WORKS:
+ * 1. Clients connect to /sync namespace with JWT token
+ * 2. Clients are automatically joined to rooms based on user type (consumer/owner/admin)
+ * 3. When data changes, call the appropriate notify* method
+ * 4. Clients receive events and invalidate their local cache to re-fetch fresh data
+ *
+ * ADDING NEW REAL-TIME FEATURES:
+ * 1. Create a new notify* method in this gateway
+ * 2. Call it from the relevant service when data changes
+ * 3. On the client, listen for the event and invalidate React Query cache
+ *
+ * NEVER tell clients to poll with setInterval or refetchInterval.
+ * ALWAYS use this WebSocket gateway for real-time updates.
+ */
+
 import {
   WebSocketGateway,
   WebSocketServer,
@@ -151,11 +177,95 @@ export class SyncGateway implements OnGatewayConnection, OnGatewayDisconnect {
       message,
       conversationId: conversation.id,
     });
+
+    // Notify admins for real-time chat monitoring
+    this.broadcastToType('admin', 'chat:message', {
+      message,
+      conversationId: conversation.id,
+      consumerId: conversation.consumerId,
+      ownerId: conversation.ownerId,
+    });
   }
 
   notifyConversationUpdated(conversation: any) {
     this.broadcastToUser(conversation.consumerId, 'consumer', 'conversation:updated', conversation);
     this.broadcastToUser(conversation.ownerId, 'owner', 'conversation:updated', conversation);
+
+    // Notify admins
+    this.broadcastToType('admin', 'chat:updated', conversation);
+  }
+
+  // Notify admins when a new conversation is created
+  notifyConversationCreated(conversation: any) {
+    this.broadcastToType('admin', 'chat:created', conversation);
+  }
+
+  notifyMessagesRead(data: {
+    conversationId: string;
+    messageIds: string[];
+    readAt: string;
+    consumerId: string;
+    ownerId: string;
+    readBy: 'consumer' | 'owner';
+  }) {
+    console.log(`[SyncGateway] notifyMessagesRead called: readBy=${data.readBy}, messageIds=${data.messageIds.length}`);
+    // Notify the sender (opposite party) that their messages were read
+    // If consumer read, notify owner. If owner read, notify consumer.
+    if (data.readBy === 'consumer') {
+      console.log(`[SyncGateway] Broadcasting messages:read to owner:${data.ownerId}`);
+      this.broadcastToUser(data.ownerId, 'owner', 'messages:read', {
+        conversationId: data.conversationId,
+        messageIds: data.messageIds,
+        readAt: data.readAt,
+      });
+    } else {
+      console.log(`[SyncGateway] Broadcasting messages:read to consumer:${data.consumerId}`);
+      this.broadcastToUser(data.consumerId, 'consumer', 'messages:read', {
+        conversationId: data.conversationId,
+        messageIds: data.messageIds,
+        readAt: data.readAt,
+      });
+    }
+
+  }
+
+  /**
+   * Notify admins about read events - ALWAYS called regardless of user read receipt settings.
+   * Admins have full observability and should see all read events.
+   */
+  notifyMessagesReadToAdmin(data: {
+    conversationId: string;
+    messageIds: string[];
+    readAt: string;
+    consumerId: string;
+    ownerId: string;
+    readBy: 'consumer' | 'owner';
+  }) {
+    this.broadcastToType('admin', 'chat:read', data);
+  }
+
+  notifyMessageDelivered(data: {
+    conversationId: string;
+    messageId: string;
+    deliveredAt: string;
+    consumerId: string;
+    ownerId: string;
+    deliveredTo: 'consumer' | 'owner';
+  }) {
+    // Notify the sender that their message was delivered
+    if (data.deliveredTo === 'consumer') {
+      this.broadcastToUser(data.ownerId, 'owner', 'message:delivered', {
+        conversationId: data.conversationId,
+        messageId: data.messageId,
+        deliveredAt: data.deliveredAt,
+      });
+    } else {
+      this.broadcastToUser(data.consumerId, 'consumer', 'message:delivered', {
+        conversationId: data.conversationId,
+        messageId: data.messageId,
+        deliveredAt: data.deliveredAt,
+      });
+    }
   }
 
   // Generic data refresh signal
