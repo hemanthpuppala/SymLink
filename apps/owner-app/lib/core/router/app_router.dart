@@ -1865,6 +1865,8 @@ class _ChatScreenState extends State<ChatScreen> {
                         itemBuilder: (context, index) {
                           final message = _messages[index];
                           final isMe = message['senderType'] == 'owner';
+                          final primaryColor = Theme.of(context).colorScheme.primary;
+                          final surfaceVariant = Theme.of(context).colorScheme.surfaceContainerHighest;
 
                           return Align(
                             alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
@@ -1876,7 +1878,7 @@ class _ChatScreenState extends State<ChatScreen> {
                               ),
                               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                               decoration: BoxDecoration(
-                                color: isMe ? Colors.green : Colors.grey.shade200,
+                                color: isMe ? primaryColor : surfaceVariant,
                                 borderRadius: BorderRadius.only(
                                   topLeft: const Radius.circular(18),
                                   topRight: const Radius.circular(18),
@@ -1890,7 +1892,7 @@ class _ChatScreenState extends State<ChatScreen> {
                                   Text(
                                     message['content'] ?? '',
                                     style: TextStyle(
-                                      color: isMe ? Colors.white : Colors.black87,
+                                      color: isMe ? Colors.white : Theme.of(context).colorScheme.onSurface,
                                       fontSize: 15,
                                     ),
                                   ),
@@ -1902,7 +1904,7 @@ class _ChatScreenState extends State<ChatScreen> {
                                         _formatMessageTime(message['sentAt']),
                                         style: TextStyle(
                                           fontSize: 11,
-                                          color: isMe ? Colors.white70 : Colors.grey,
+                                          color: isMe ? Colors.white70 : Theme.of(context).colorScheme.onSurfaceVariant,
                                         ),
                                       ),
                                       if (isMe) ...[
@@ -1944,10 +1946,10 @@ class _ChatScreenState extends State<ChatScreen> {
           Container(
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: Theme.of(context).colorScheme.surface,
               boxShadow: [
                 BoxShadow(
-                  color: Colors.grey.shade200,
+                  color: Theme.of(context).shadowColor.withOpacity(0.1),
                   offset: const Offset(0, -1),
                   blurRadius: 4,
                 ),
@@ -1966,7 +1968,7 @@ class _ChatScreenState extends State<ChatScreen> {
                           borderSide: BorderSide.none,
                         ),
                         filled: true,
-                        fillColor: Colors.grey.shade100,
+                        fillColor: Theme.of(context).colorScheme.surfaceContainerHighest,
                         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                       ),
                       onChanged: (_) => _onTyping(),
@@ -1985,8 +1987,8 @@ class _ChatScreenState extends State<ChatScreen> {
                           )
                         : const Icon(Icons.send),
                     style: IconButton.styleFrom(
-                      backgroundColor: Colors.green,
-                      foregroundColor: Colors.white,
+                      backgroundColor: Theme.of(context).colorScheme.primary,
+                      foregroundColor: Theme.of(context).colorScheme.onPrimary,
                     ),
                   ),
                 ],
