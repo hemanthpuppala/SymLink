@@ -15,7 +15,6 @@ class AppRouter {
   static final _rootNavigatorKey = GlobalKey<NavigatorState>();
   static final _shellNavigatorKey = GlobalKey<NavigatorState>();
   static SecureStorage? _storage;
-  static int _previousTabIndex = 0;
   static int _currentTabIndex = 0;
 
   static void setStorage(SecureStorage storage) {
@@ -33,11 +32,14 @@ class AppRouter {
   // Custom page with directional slide transition
   static Page<dynamic> _buildTabPage(Widget child, GoRouterState state) {
     final newIndex = _getTabIndex(state.matchedLocation);
-    final slideFromRight = newIndex > _previousTabIndex;
 
-    // Update indices for next navigation
-    _previousTabIndex = _currentTabIndex;
-    _currentTabIndex = newIndex;
+    // Determine direction: slide from right if going to higher index tab
+    final slideFromRight = newIndex > _currentTabIndex;
+
+    // Only update if actually changing tabs (prevents issues with multiple builder calls)
+    if (newIndex != _currentTabIndex) {
+      _currentTabIndex = newIndex;
+    }
 
     return CustomTransitionPage(
       key: state.pageKey,
