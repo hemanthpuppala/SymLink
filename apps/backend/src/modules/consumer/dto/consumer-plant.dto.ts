@@ -1,5 +1,17 @@
-import { IsNumber, IsOptional, IsString, Min, Max } from 'class-validator';
-import { Type } from 'class-transformer';
+import { IsNumber, IsOptional, IsString, Min, Max, IsBoolean, IsEnum } from 'class-validator';
+import { Type, Transform } from 'class-transformer';
+
+export enum SortBy {
+  DISTANCE = 'distance',
+  TDS = 'tds',
+  PRICE = 'price',
+  NAME = 'name',
+}
+
+export enum SortOrder {
+  ASC = 'asc',
+  DESC = 'desc',
+}
 
 export class NearbyPlantsQueryDto {
   @Type(() => Number)
@@ -27,6 +39,43 @@ export class NearbyPlantsQueryDto {
   @Min(1)
   @Max(100)
   limit?: number = 50;
+
+  @Transform(({ value }) => value === 'true' || value === true)
+  @IsBoolean()
+  @IsOptional()
+  verifiedOnly?: boolean;
+
+  @IsEnum(SortBy)
+  @IsOptional()
+  sortBy?: SortBy = SortBy.DISTANCE;
+
+  @IsEnum(SortOrder)
+  @IsOptional()
+  sortOrder?: SortOrder = SortOrder.ASC;
+
+  @Type(() => Number)
+  @IsNumber()
+  @IsOptional()
+  @Min(0)
+  minTds?: number;
+
+  @Type(() => Number)
+  @IsNumber()
+  @IsOptional()
+  @Min(0)
+  maxTds?: number;
+
+  @Type(() => Number)
+  @IsNumber()
+  @IsOptional()
+  @Min(0)
+  minPrice?: number;
+
+  @Type(() => Number)
+  @IsNumber()
+  @IsOptional()
+  @Min(0)
+  maxPrice?: number;
 }
 
 export class SearchPlantsQueryDto {
@@ -60,4 +109,41 @@ export class SearchPlantsQueryDto {
   @Min(1)
   @Max(100)
   limit?: number = 20;
+
+  @Transform(({ value }) => value === 'true' || value === true)
+  @IsBoolean()
+  @IsOptional()
+  verifiedOnly?: boolean;
+
+  @IsEnum(SortBy)
+  @IsOptional()
+  sortBy?: SortBy = SortBy.DISTANCE;
+
+  @IsEnum(SortOrder)
+  @IsOptional()
+  sortOrder?: SortOrder = SortOrder.ASC;
+
+  @Type(() => Number)
+  @IsNumber()
+  @IsOptional()
+  @Min(0)
+  minTds?: number;
+
+  @Type(() => Number)
+  @IsNumber()
+  @IsOptional()
+  @Min(0)
+  maxTds?: number;
+
+  @Type(() => Number)
+  @IsNumber()
+  @IsOptional()
+  @Min(0)
+  minPrice?: number;
+
+  @Type(() => Number)
+  @IsNumber()
+  @IsOptional()
+  @Min(0)
+  maxPrice?: number;
 }

@@ -451,21 +451,20 @@ class _MainShellState extends State<MainShell> {
   }
 
   Future<void> _loadUnreadCount() async {
+    if (!mounted) return;
     try {
       final apiClient = RepositoryProvider.of<ApiClient>(context);
       final response = await apiClient.get('/consumer/conversations');
 
-      if (response.statusCode == 200) {
+      if (mounted && response.statusCode == 200) {
         final conversations = response.data['data'] ?? [];
         int total = 0;
         for (final conv in conversations) {
           total += (conv['unreadCount'] ?? 0) as int;
         }
-        if (mounted) {
-          setState(() {
-            _totalUnreadCount = total;
-          });
-        }
+        setState(() {
+          _totalUnreadCount = total;
+        });
       }
     } catch (e) {
       print('[MainShell] Error loading unread count: $e');
@@ -553,14 +552,22 @@ class _MainShellState extends State<MainShell> {
     final isMainTab = _isMainTabRoute(context);
 
     return Scaffold(
-      body: isMainTab
-          ? PageView(
+      body: Stack(
+        children: [
+          // Keep PageView in the tree but hide when not on main tabs
+          Offstage(
+            offstage: !isMainTab,
+            child: PageView(
               controller: _pageController,
               onPageChanged: _onPageChanged,
               physics: const BouncingScrollPhysics(),
               children: _screens,
-            )
-          : widget.child, // Show sub-route content (e.g., conversation detail)
+            ),
+          ),
+          // Show sub-route content when not on main tabs
+          if (!isMainTab) widget.child,
+        ],
+      ),
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _currentIndex,
         type: BottomNavigationBarType.fixed,
@@ -628,6 +635,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _loadPlants() async {
+    if (!mounted) return;
     try {
       final apiClient = RepositoryProvider.of<ApiClient>(context);
       final response = await apiClient.get('/consumer/plants/nearby', queryParameters: {
@@ -636,17 +644,19 @@ class _HomeScreenState extends State<HomeScreen> {
         'radiusKm': '10',
       });
 
-      if (response.statusCode == 200) {
+      if (mounted && response.statusCode == 200) {
         setState(() {
           _plants = response.data['data'] ?? [];
           _isLoading = false;
         });
       }
     } catch (e) {
-      setState(() {
-        _error = e.toString();
-        _isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _error = e.toString();
+          _isLoading = false;
+        });
+      }
     }
   }
 
@@ -1570,6 +1580,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
   }
 
   Future<void> _loadConversations({bool silent = false}) async {
+    if (!mounted) return;
     if (!silent) {
       setState(() {
         _isLoading = true;
@@ -1581,17 +1592,19 @@ class _ChatListScreenState extends State<ChatListScreen> {
       final apiClient = RepositoryProvider.of<ApiClient>(context);
       final response = await apiClient.get('/consumer/conversations');
 
-      if (response.statusCode == 200) {
+      if (mounted && response.statusCode == 200) {
         setState(() {
           _conversations = response.data['data'] ?? [];
           _isLoading = false;
         });
       }
     } catch (e) {
-      setState(() {
-        _error = e.toString();
-        _isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _error = e.toString();
+          _isLoading = false;
+        });
+      }
     }
   }
 
@@ -1762,12 +1775,65 @@ class _ChatScreenState extends State<ChatScreen> {
   bool _otherTyping = false;
   IO.Socket? _socket;
   Timer? _typingTimer;
+  StreamSubscription? _syncMessageSub;
+  StreamSubscription? _syncMessagesReadSub;
 
   @override
   void initState() {
     super.initState();
     _loadMessages();
     _connectWebSocket();
+    _setupSyncListener();
+  }
+
+  void _setupSyncListener() {
+    // Listen to SyncService for messages from OTHER party only
+    // Self-sent messages are added directly from API response in _sendMessage()
+    _syncMessageSub = SyncService.instance.onNewMessage.listen((data) {
+      final conversationId = data['conversationId'];
+      final message = data['message'];
+
+      if (conversationId == widget.conversationId && message != null && mounted) {
+        // IMPORTANT: Skip self-sent messages - they're added from API response
+        if (message['senderType'] == 'consumer') {
+          return;
+        }
+
+        // Check if message is not already in the list (avoid duplicates)
+        final exists = _messages.any((m) => m['id'] == message['id']);
+        if (!exists) {
+          setState(() {
+            _messages.add(message);
+          });
+          _scrollToBottom();
+
+          // WhatsApp logic: If chat is open and message is from OTHER party, mark as read immediately
+          _markConversationAsRead();
+        }
+      }
+    });
+
+    // Listen for read receipts
+    _syncMessagesReadSub = SyncService.instance.onMessagesRead.listen((data) {
+      print('[ChatScreen] Received messages:read event: $data');
+      final conversationId = data['conversationId'];
+      final messageIds = data['messageIds'] as List<dynamic>?;
+      final readAt = data['readAt'];
+
+      print('[ChatScreen] Current conversationId: ${widget.conversationId}, event conversationId: $conversationId');
+      if (conversationId == widget.conversationId && messageIds != null && mounted) {
+        print('[ChatScreen] Updating ${messageIds.length} messages with readAt');
+        setState(() {
+          for (final msgId in messageIds) {
+            final index = _messages.indexWhere((m) => m['id'] == msgId);
+            if (index != -1) {
+              _messages[index]['readAt'] = readAt;
+              print('[ChatScreen] Updated message $msgId with readAt=$readAt');
+            }
+          }
+        });
+      }
+    });
   }
 
   @override
@@ -1775,6 +1841,8 @@ class _ChatScreenState extends State<ChatScreen> {
     _messageController.dispose();
     _scrollController.dispose();
     _typingTimer?.cancel();
+    _syncMessageSub?.cancel();
+    _syncMessagesReadSub?.cancel();
     _disconnectWebSocket();
     super.dispose();
   }
@@ -1803,10 +1871,22 @@ class _ChatScreenState extends State<ChatScreen> {
 
     _socket?.on('new_message', (data) {
       if (mounted) {
-        setState(() {
-          _messages.add(data);
-        });
-        _scrollToBottom();
+        // IMPORTANT: Skip self-sent messages - they're added from API response
+        if (data['senderType'] == 'consumer') {
+          return;
+        }
+
+        // Check if message already exists (avoid duplicates)
+        final exists = _messages.any((m) => m['id'] == data['id']);
+        if (!exists) {
+          setState(() {
+            _messages.add(data);
+          });
+          _scrollToBottom();
+
+          // WhatsApp logic: If chat is open and message is from OTHER party, mark as read immediately
+          _markConversationAsRead();
+        }
       }
     });
 
@@ -1851,13 +1931,14 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   Future<void> _loadMessages() async {
+    if (!mounted) return;
     try {
       final apiClient = RepositoryProvider.of<ApiClient>(context);
 
       // Load messages and conversation info
       final response = await apiClient.get('/consumer/conversations/${widget.conversationId}/messages');
 
-      if (response.statusCode == 200) {
+      if (mounted && response.statusCode == 200) {
         final data = response.data['data'];
         setState(() {
           _messages = data['messages'] ?? [];
@@ -1865,14 +1946,28 @@ class _ChatScreenState extends State<ChatScreen> {
           _isLoading = false;
         });
 
-        // Mark as read
-        await apiClient.post('/consumer/conversations/${widget.conversationId}/read');
+        // Mark as read (WhatsApp logic: opening chat marks all messages as read)
+        _markConversationAsRead();
 
         _scrollToBottom();
       }
     } catch (e) {
       print('[Chat] Error loading messages: $e');
-      setState(() => _isLoading = false);
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
+  }
+
+  /// Mark all messages in this conversation as read (WhatsApp-style)
+  /// Called when: 1) Chat is opened, 2) New message arrives while chat is open
+  Future<void> _markConversationAsRead() async {
+    try {
+      final apiClient = RepositoryProvider.of<ApiClient>(context);
+      await apiClient.post('/consumer/conversations/${widget.conversationId}/read');
+    } catch (e) {
+      // Silently fail - read receipts are not critical
+      print('[Chat] Error marking as read: $e');
     }
   }
 
@@ -1951,13 +2046,15 @@ class _ChatScreenState extends State<ChatScreen> {
   Widget _buildMessageStatus(dynamic message) {
     if (message['senderType'] != 'consumer') return const SizedBox.shrink();
 
-    if (message['readAt'] != null) {
-      return const Icon(Icons.done_all, size: 14, color: Colors.blue);
-    } else if (message['deliveredAt'] != null) {
-      return const Icon(Icons.done_all, size: 14, color: Colors.grey);
-    } else {
-      return const Icon(Icons.done, size: 14, color: Colors.grey);
-    }
+    final bool isRead = message['readAt'] != null;
+    final bool isDelivered = message['deliveredAt'] != null;
+    final bool isDoubleCheck = isRead || isDelivered;
+
+    return _AnimatedMessageStatus(
+      key: ValueKey('status-${message['id']}'),
+      isRead: isRead,
+      isDoubleCheck: isDoubleCheck,
+    );
   }
 
   @override
@@ -2014,45 +2111,54 @@ class _ChatScreenState extends State<ChatScreen> {
                           final message = _messages[index];
                           final isMe = message['senderType'] == 'consumer';
 
-                          final primaryColor = Theme.of(context).colorScheme.primary;
+                          // Consumer app: Teal for sent messages, light grey for received
+                          const myBubbleColor = Color(0xFF009688); // Teal
+                          final otherBubbleColor = Colors.grey.shade200;
 
-                          return Align(
-                            alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
-                            child: Container(
-                              margin: EdgeInsets.only(
-                                bottom: 8,
-                                left: isMe ? 48 : 0,
-                                right: isMe ? 0 : 48,
-                              ),
-                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                              decoration: BoxDecoration(
-                                color: isMe ? primaryColor : Colors.white,
-                                borderRadius: BorderRadius.only(
-                                  topLeft: const Radius.circular(18),
-                                  topRight: const Radius.circular(18),
-                                  bottomLeft: Radius.circular(isMe ? 18 : 4),
-                                  bottomRight: Radius.circular(isMe ? 4 : 18),
-                                ),
-                              ),
-                              child: Column(
-                                crossAxisAlignment: isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
-                                children: [
-                                  Text(
+                          return Padding(
+                            padding: const EdgeInsets.only(bottom: 12),
+                            child: Column(
+                              crossAxisAlignment: isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+                              children: [
+                                // Message bubble
+                                Container(
+                                  margin: EdgeInsets.only(
+                                    left: isMe ? 48 : 0,
+                                    right: isMe ? 0 : 48,
+                                  ),
+                                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                                  decoration: BoxDecoration(
+                                    color: isMe ? myBubbleColor : otherBubbleColor,
+                                    borderRadius: BorderRadius.only(
+                                      topLeft: const Radius.circular(18),
+                                      topRight: const Radius.circular(18),
+                                      bottomLeft: Radius.circular(isMe ? 18 : 4),
+                                      bottomRight: Radius.circular(isMe ? 4 : 18),
+                                    ),
+                                  ),
+                                  child: Text(
                                     message['content'] ?? '',
                                     style: TextStyle(
                                       color: isMe ? Colors.white : Colors.black87,
                                       fontSize: 15,
                                     ),
                                   ),
-                                  const SizedBox(height: 4),
-                                  Row(
+                                ),
+                                // Timestamp and status below bubble
+                                Padding(
+                                  padding: EdgeInsets.only(
+                                    top: 4,
+                                    left: isMe ? 48 : 4,
+                                    right: isMe ? 4 : 48,
+                                  ),
+                                  child: Row(
                                     mainAxisSize: MainAxisSize.min,
                                     children: [
                                       Text(
                                         _formatMessageTime(message['sentAt']),
                                         style: TextStyle(
                                           fontSize: 11,
-                                          color: isMe ? Colors.white70 : Colors.grey,
+                                          color: Colors.grey.shade600,
                                         ),
                                       ),
                                       if (isMe) ...[
@@ -2061,8 +2167,8 @@ class _ChatScreenState extends State<ChatScreen> {
                                       ],
                                     ],
                                   ),
-                                ],
-                              ),
+                                ),
+                              ],
                             ),
                           );
                         },
@@ -2145,6 +2251,108 @@ class _ChatScreenState extends State<ChatScreen> {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// Animated message status widget (WhatsApp-style tick animation)
+class _AnimatedMessageStatus extends StatefulWidget {
+  final bool isRead;
+  final bool isDoubleCheck;
+
+  const _AnimatedMessageStatus({
+    super.key,
+    required this.isRead,
+    required this.isDoubleCheck,
+  });
+
+  @override
+  State<_AnimatedMessageStatus> createState() => _AnimatedMessageStatusState();
+}
+
+class _AnimatedMessageStatusState extends State<_AnimatedMessageStatus>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _colorController;
+  late Animation<Color?> _colorAnimation;
+  late bool _wasRead;
+  late bool _wasDoubleCheck;
+
+  static const Color _greyColor = Color(0xFF757575);
+  static const Color _blueColor = Color(0xFF4FC3F7);
+
+  @override
+  void initState() {
+    super.initState();
+    _wasRead = widget.isRead;
+    _wasDoubleCheck = widget.isDoubleCheck;
+
+    _colorController = AnimationController(
+      duration: const Duration(milliseconds: 400),
+      vsync: this,
+    );
+
+    _colorAnimation = ColorTween(
+      begin: _greyColor,
+      end: widget.isRead ? _blueColor : _greyColor,
+    ).animate(CurvedAnimation(
+      parent: _colorController,
+      curve: Curves.easeInOut,
+    ));
+
+    if (widget.isRead) {
+      _colorController.value = 1.0;
+    }
+  }
+
+  @override
+  void didUpdateWidget(_AnimatedMessageStatus oldWidget) {
+    super.didUpdateWidget(oldWidget);
+
+    // Animate when status changes from sent/delivered to read
+    if (widget.isRead && !oldWidget.isRead) {
+      _colorAnimation = ColorTween(
+        begin: _greyColor,
+        end: _blueColor,
+      ).animate(CurvedAnimation(
+        parent: _colorController,
+        curve: Curves.easeInOut,
+      ));
+      _colorController.forward(from: 0.0);
+    }
+
+    _wasRead = widget.isRead;
+    _wasDoubleCheck = widget.isDoubleCheck;
+  }
+
+  @override
+  void dispose() {
+    _colorController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _colorController,
+      builder: (context, child) {
+        return AnimatedSwitcher(
+          duration: const Duration(milliseconds: 250),
+          switchInCurve: Curves.easeOut,
+          switchOutCurve: Curves.easeIn,
+          transitionBuilder: (child, animation) {
+            return ScaleTransition(
+              scale: Tween<double>(begin: 0.5, end: 1.0).animate(animation),
+              child: FadeTransition(opacity: animation, child: child),
+            );
+          },
+          child: Icon(
+            widget.isDoubleCheck ? Icons.done_all : Icons.done,
+            key: ValueKey(widget.isDoubleCheck),
+            size: 16,
+            color: _colorAnimation.value ?? _greyColor,
+          ),
+        );
+      },
     );
   }
 }
@@ -2240,11 +2448,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Future<void> _loadProfile() async {
+    if (!mounted) return;
     try {
       final apiClient = RepositoryProvider.of<ApiClient>(context);
       final response = await apiClient.get('/consumer/profile');
 
-      if (response.statusCode == 200) {
+      if (mounted && response.statusCode == 200) {
         final data = response.data['data'] ?? response.data;
         setState(() {
           _profile = data;
@@ -2255,7 +2464,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
         });
       }
     } catch (e) {
-      setState(() => _isLoading = false);
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
 

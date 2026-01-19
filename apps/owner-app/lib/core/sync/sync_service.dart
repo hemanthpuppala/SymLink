@@ -25,6 +25,8 @@ class SyncService extends ChangeNotifier {
   final _plantDeletedController = StreamController<String>.broadcast();
   final _verificationController = StreamController<Map<String, dynamic>>.broadcast();
   final _messageController = StreamController<Map<String, dynamic>>.broadcast();
+  final _messagesReadController = StreamController<Map<String, dynamic>>.broadcast();
+  final _messageDeliveredController = StreamController<Map<String, dynamic>>.broadcast();
   final _conversationController = StreamController<Map<String, dynamic>>.broadcast();
   final _refreshController = StreamController<String>.broadcast();
 
@@ -34,6 +36,8 @@ class SyncService extends ChangeNotifier {
   Stream<String> get onPlantDeleted => _plantDeletedController.stream;
   Stream<Map<String, dynamic>> get onVerificationUpdated => _verificationController.stream;
   Stream<Map<String, dynamic>> get onNewMessage => _messageController.stream;
+  Stream<Map<String, dynamic>> get onMessagesRead => _messagesReadController.stream;
+  Stream<Map<String, dynamic>> get onMessageDelivered => _messageDeliveredController.stream;
   Stream<Map<String, dynamic>> get onConversationUpdated => _conversationController.stream;
   Stream<String> get onRefresh => _refreshController.stream;
 
@@ -117,6 +121,16 @@ class SyncService extends ChangeNotifier {
       _messageController.add(Map<String, dynamic>.from(data));
     });
 
+    _socket?.on('messages:read', (data) {
+      print('[SyncService] Messages read: $data');
+      _messagesReadController.add(Map<String, dynamic>.from(data));
+    });
+
+    _socket?.on('message:delivered', (data) {
+      print('[SyncService] Message delivered: $data');
+      _messageDeliveredController.add(Map<String, dynamic>.from(data));
+    });
+
     _socket?.on('conversation:updated', (data) {
       print('[SyncService] Conversation updated: $data');
       _conversationController.add(Map<String, dynamic>.from(data));
@@ -149,6 +163,8 @@ class SyncService extends ChangeNotifier {
     _plantDeletedController.close();
     _verificationController.close();
     _messageController.close();
+    _messagesReadController.close();
+    _messageDeliveredController.close();
     _conversationController.close();
     _refreshController.close();
   }

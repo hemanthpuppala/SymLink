@@ -1,4 +1,5 @@
 import '../../../core/api/api_client.dart';
+import '../models/plant_filter.dart';
 
 class Plant {
   final String id;
@@ -14,6 +15,7 @@ class Plant {
   final List<String> photos;
   final bool isVerified;
   final bool isActive;
+  final bool isOpen;
   final double? distance;
   final PlantOwner? owner;
 
@@ -31,6 +33,7 @@ class Plant {
     required this.photos,
     required this.isVerified,
     required this.isActive,
+    this.isOpen = true,
     this.distance,
     this.owner,
   });
@@ -52,6 +55,7 @@ class Plant {
       photos: List<String>.from(json['photos'] ?? []),
       isVerified: json['isVerified'] ?? false,
       isActive: json['isActive'] ?? true,
+      isOpen: json['isOpen'] ?? true,
       distance: json['distance'] != null
           ? (json['distance'] as num).toDouble()
           : null,
@@ -89,15 +93,22 @@ class PlantRepository {
     required double longitude,
     double radiusKm = 10,
     int limit = 50,
+    PlantFilter? filter,
   }) async {
+    final queryParams = <String, dynamic>{
+      'latitude': latitude,
+      'longitude': longitude,
+      'radiusKm': radiusKm,
+      'limit': limit,
+    };
+
+    if (filter != null) {
+      queryParams.addAll(filter.toQueryParams());
+    }
+
     final response = await _apiClient.get(
       '/v1/consumer/plants/nearby',
-      queryParameters: {
-        'latitude': latitude,
-        'longitude': longitude,
-        'radiusKm': radiusKm,
-        'limit': limit,
-      },
+      queryParameters: queryParams,
     );
 
     final data = response.data['data'];
@@ -113,6 +124,7 @@ class PlantRepository {
     double? longitude,
     int page = 1,
     int limit = 20,
+    PlantFilter? filter,
   }) async {
     final params = <String, dynamic>{
       'page': page,
@@ -127,6 +139,10 @@ class PlantRepository {
     }
     if (longitude != null) {
       params['longitude'] = longitude;
+    }
+
+    if (filter != null) {
+      params.addAll(filter.toQueryParams());
     }
 
     final response = await _apiClient.get(

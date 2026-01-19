@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:dio/dio.dart';
 import '../storage/secure_storage.dart';
 
@@ -141,5 +142,25 @@ class ApiClient {
     Options? options,
   }) {
     return _dio.delete<T>(path, data: data, queryParameters: queryParameters, options: options);
+  }
+
+  Future<Response<T>> uploadFile<T>(
+    String path,
+    File file,
+    String fieldName, {
+    Map<String, dynamic>? extraFields,
+    Options? options,
+  }) async {
+    final fileName = file.path.split('/').last;
+    final formData = FormData.fromMap({
+      fieldName: await MultipartFile.fromFile(file.path, filename: fileName),
+      if (extraFields != null) ...extraFields,
+    });
+
+    return _dio.post<T>(
+      path,
+      data: formData,
+      options: options ?? Options(contentType: 'multipart/form-data'),
+    );
   }
 }

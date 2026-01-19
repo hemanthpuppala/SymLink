@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { useRouter } from 'next/navigation';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { CheckIcon, XMarkIcon, EyeIcon, ArrowPathIcon } from '@heroicons/react/24/outline';
 import { apiClient } from '@/lib/api';
@@ -29,6 +30,7 @@ const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://10.0.0.17:3000/v1';
 const API_URL = API_BASE.replace('/v1', '');
 
 export default function VerificationPage() {
+  const router = useRouter();
   const [requests, setRequests] = useState<VerificationRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<'all' | 'PENDING' | 'APPROVED' | 'REJECTED'>('PENDING');
@@ -204,7 +206,11 @@ export default function VerificationPage() {
                     </td>
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-2">
-                        <button className="rounded p-1 text-gray-500 hover:bg-gray-100 hover:text-gray-700">
+                        <button
+                          onClick={() => router.push(`/verification/${request.id}`)}
+                          className="rounded p-1 text-gray-500 hover:bg-gray-100 hover:text-gray-700"
+                          title="View details"
+                        >
                           <EyeIcon className="h-5 w-5" />
                         </button>
                         {request.status === 'PENDING' && (

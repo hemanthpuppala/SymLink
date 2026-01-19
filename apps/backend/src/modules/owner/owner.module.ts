@@ -7,6 +7,7 @@ import { OwnerProfileController } from './owner-profile.controller';
 import { OwnerPlantController } from './owner-plant.controller';
 import { OwnerVerificationController } from './owner-verification.controller';
 import { OwnerNotificationsController } from './owner-notifications.controller';
+import { OwnerAnalyticsController } from './owner-analytics.controller';
 
 @Module({
   imports: [
@@ -24,6 +25,7 @@ import { OwnerNotificationsController } from './owner-notifications.controller';
     OwnerPlantController,
     OwnerVerificationController,
     OwnerNotificationsController,
+    OwnerAnalyticsController,
   ],
 })
 export class OwnerModule {}

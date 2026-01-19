@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/api/api_client.dart';
 import '../../../core/sync/sync_service.dart';
 import '../../plant_profile/repositories/plant_repository.dart';
+import '../../analytics/widgets/analytics_card.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -88,9 +89,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         actions: [
           IconButton(
             icon: const Icon(Icons.notifications_outlined),
-            onPressed: () {
-              // Navigate to notifications
-            },
+            onPressed: () => context.push('/notifications'),
           ),
         ],
       ),
@@ -113,6 +112,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     const SizedBox(height: 24),
                     _buildQuickStats(context),
                     const SizedBox(height: 24),
+                    if (_plants.isNotEmpty)
+                      AnalyticsCard(
+                        onTap: () => context.push('/analytics'),
+                      ),
+                    if (_plants.isNotEmpty)
+                      const SizedBox(height: 24),
                     Text(
                       'Quick Actions',
                       style: Theme.of(context).textTheme.titleMedium?.copyWith(
@@ -251,75 +256,329 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   Widget _buildPlantsList(BuildContext context) {
     return Column(
-      children: _plants.map((plant) => _PlantCard(plant: plant)).toList(),
+      children: _plants.map((plant) => _PlantCard(
+        plant: plant,
+        onUpdated: _loadDashboardData,
+      )).toList(),
     );
   }
 }
 
-class _PlantCard extends StatelessWidget {
+class _PlantCard extends StatefulWidget {
   final Plant plant;
+  final VoidCallback? onUpdated;
 
-  const _PlantCard({required this.plant});
+  const _PlantCard({required this.plant, this.onUpdated});
+
+  @override
+  State<_PlantCard> createState() => _PlantCardState();
+}
+
+class _PlantCardState extends State<_PlantCard> {
+  late bool _isOpen;
+  bool _isUpdating = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _isOpen = widget.plant.isActive;
+  }
+
+  @override
+  void didUpdateWidget(_PlantCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.plant.isActive != widget.plant.isActive) {
+      _isOpen = widget.plant.isActive;
+    }
+  }
+
+  Future<void> _toggleOpenStatus() async {
+    setState(() => _isUpdating = true);
+    try {
+      final apiClient = RepositoryProvider.of<ApiClient>(context);
+      final newStatus = !_isOpen;
+      final response = await apiClient.patch(
+        '/owner/plant/${widget.plant.id}',
+        data: {'isActive': newStatus},
+      );
+      if (response.statusCode == 200) {
+        setState(() => _isOpen = newStatus);
+        widget.onUpdated?.call();
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(newStatus ? 'Plant is now open' : 'Plant is now closed')),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Failed to update status')),
+        );
+      }
+    } finally {
+      setState(() => _isUpdating = false);
+    }
+  }
+
+  void _showQuickEditDialog() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      builder: (context) => _QuickEditSheet(
+        plant: widget.plant,
+        onUpdated: widget.onUpdated,
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
-      child: ListTile(
-        leading: CircleAvatar(
-          backgroundColor: plant.isVerified ? Colors.green : Colors.grey,
-          child: const Icon(Icons.water_drop, color: Colors.white),
-        ),
-        title: Text(plant.name),
-        subtitle: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              plant.address,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
+      child: Column(
+        children: [
+          ListTile(
+            leading: CircleAvatar(
+              backgroundColor: widget.plant.isVerified ? Colors.green : Colors.grey,
+              child: const Icon(Icons.water_drop, color: Colors.white),
             ),
-            const SizedBox(height: 4),
-            Row(
+            title: Text(widget.plant.name),
+            subtitle: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: plant.isActive ? Colors.green : Colors.red,
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Text(
-                    plant.isActive ? 'Open' : 'Closed',
-                    style: const TextStyle(color: Colors.white, fontSize: 10),
-                  ),
+                Text(
+                  widget.plant.address,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
-                const SizedBox(width: 8),
-                if (plant.isVerified)
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                    decoration: BoxDecoration(
-                      color: Colors.blue,
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: const Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.verified, size: 12, color: Colors.white),
-                        SizedBox(width: 4),
-                        Text(
-                          'Verified',
-                          style: TextStyle(color: Colors.white, fontSize: 10),
+                const SizedBox(height: 4),
+                Row(
+                  children: [
+                    if (widget.plant.isVerified)
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                        margin: const EdgeInsets.only(right: 8),
+                        decoration: BoxDecoration(
+                          color: Colors.blue,
+                          borderRadius: BorderRadius.circular(10),
                         ),
-                      ],
-                    ),
-                  ),
+                        child: const Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.verified, size: 12, color: Colors.white),
+                            SizedBox(width: 4),
+                            Text(
+                              'Verified',
+                              style: TextStyle(color: Colors.white, fontSize: 10),
+                            ),
+                          ],
+                        ),
+                      ),
+                    if (widget.plant.tdsLevel != null)
+                      Text(
+                        'TDS: ${widget.plant.tdsLevel}',
+                        style: TextStyle(color: Colors.grey[600], fontSize: 12),
+                      ),
+                    if (widget.plant.pricePerLiter != null) ...[
+                      const SizedBox(width: 12),
+                      Text(
+                        '₹${widget.plant.pricePerLiter!.toStringAsFixed(2)}/L',
+                        style: TextStyle(color: Colors.grey[600], fontSize: 12),
+                      ),
+                    ],
+                  ],
+                ),
               ],
             ),
-          ],
-        ),
-        isThreeLine: true,
-        trailing: const Icon(Icons.chevron_right),
-        onTap: () => context.push('/plants/${plant.id}'),
+            isThreeLine: true,
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => context.push('/plants/${widget.plant.id}'),
+          ),
+          const Divider(height: 1),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            child: Row(
+              children: [
+                // Open/Closed Toggle
+                _isUpdating
+                    ? const SizedBox(
+                        width: 24,
+                        height: 24,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : Switch(
+                        value: _isOpen,
+                        onChanged: (_) => _toggleOpenStatus(),
+                        activeColor: Colors.green,
+                      ),
+                Text(
+                  _isOpen ? 'Open' : 'Closed',
+                  style: TextStyle(
+                    color: _isOpen ? Colors.green : Colors.red,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                const Spacer(),
+                // Quick Edit Button
+                TextButton.icon(
+                  onPressed: _showQuickEditDialog,
+                  icon: const Icon(Icons.edit, size: 18),
+                  label: const Text('Quick Edit'),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _QuickEditSheet extends StatefulWidget {
+  final Plant plant;
+  final VoidCallback? onUpdated;
+
+  const _QuickEditSheet({required this.plant, this.onUpdated});
+
+  @override
+  State<_QuickEditSheet> createState() => _QuickEditSheetState();
+}
+
+class _QuickEditSheetState extends State<_QuickEditSheet> {
+  late TextEditingController _tdsController;
+  late TextEditingController _priceController;
+  bool _isLoading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _tdsController = TextEditingController(
+      text: widget.plant.tdsLevel?.toString() ?? '',
+    );
+    _priceController = TextEditingController(
+      text: widget.plant.pricePerLiter?.toStringAsFixed(2) ?? '',
+    );
+  }
+
+  @override
+  void dispose() {
+    _tdsController.dispose();
+    _priceController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _saveChanges() async {
+    setState(() => _isLoading = true);
+    try {
+      final apiClient = RepositoryProvider.of<ApiClient>(context);
+      final data = <String, dynamic>{};
+
+      final tds = int.tryParse(_tdsController.text);
+      if (tds != null) {
+        data['tdsLevel'] = tds;
+      }
+
+      final price = double.tryParse(_priceController.text);
+      if (price != null) {
+        data['pricePerLiter'] = price;
+      }
+
+      if (data.isEmpty) {
+        Navigator.pop(context);
+        return;
+      }
+
+      final response = await apiClient.patch(
+        '/owner/plant/${widget.plant.id}',
+        data: data,
+      );
+
+      if (response.statusCode == 200) {
+        widget.onUpdated?.call();
+        if (mounted) {
+          Navigator.pop(context);
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Plant updated successfully')),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Failed to update plant')),
+        );
+      }
+    } finally {
+      setState(() => _isLoading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.only(
+        bottom: MediaQuery.of(context).viewInsets.bottom,
+        left: 16,
+        right: 16,
+        top: 16,
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  'Quick Edit - ${widget.plant.name}',
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
+                ),
+              ),
+              IconButton(
+                icon: const Icon(Icons.close),
+                onPressed: () => Navigator.pop(context),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          TextField(
+            controller: _tdsController,
+            decoration: const InputDecoration(
+              labelText: 'TDS Level (ppm)',
+              prefixIcon: Icon(Icons.science),
+              border: OutlineInputBorder(),
+            ),
+            keyboardType: TextInputType.number,
+          ),
+          const SizedBox(height: 16),
+          TextField(
+            controller: _priceController,
+            decoration: const InputDecoration(
+              labelText: 'Price per Liter (₹)',
+              prefixIcon: Icon(Icons.currency_rupee),
+              border: OutlineInputBorder(),
+            ),
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          ),
+          const SizedBox(height: 24),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton(
+              onPressed: _isLoading ? null : _saveChanges,
+              child: _isLoading
+                  ? const SizedBox(
+                      height: 20,
+                      width: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Text('Save Changes'),
+            ),
+          ),
+          const SizedBox(height: 16),
+        ],
       ),
     );
   }

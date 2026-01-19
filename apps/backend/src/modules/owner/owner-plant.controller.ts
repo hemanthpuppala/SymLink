@@ -247,4 +247,35 @@ export class OwnerPlantController {
 
     return { photos: parsePhotos(updatedPlant.photos) };
   }
+
+  @Get(':id/share')
+  async getShareInfo(@Request() req: any, @Param('id') id: string) {
+    const plant = await this.prisma.plant.findFirst({
+      where: {
+        id,
+        ownerId: req.user.sub,
+      },
+    });
+
+    if (!plant) {
+      throw new NotFoundException('Plant not found');
+    }
+
+    // Generate share URLs - these would be the public profile URLs
+    const baseUrl = process.env.PUBLIC_URL || 'https://flowgrid.app';
+    const shareUrl = `${baseUrl}/p/${plant.id}`;
+
+    // Generate a simple data URL for QR code (can be rendered client-side)
+    // The actual QR code generation can be done client-side using the shareUrl
+    const qrData = shareUrl;
+
+    return {
+      plantId: plant.id,
+      plantName: plant.name,
+      shareUrl,
+      qrData,
+      deepLink: `flowgrid://plant/${plant.id}`,
+      message: `Check out ${plant.name} on FlowGrid: ${shareUrl}`,
+    };
+  }
 }

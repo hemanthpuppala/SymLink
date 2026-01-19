@@ -1,5 +1,6 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../repositories/plant_repository.dart';
+import '../models/plant_filter.dart';
 import 'plants_event.dart';
 import 'plants_state.dart';
 
@@ -13,16 +14,20 @@ class PlantsBloc extends Bloc<PlantsEvent, PlantsState> {
     on<PlantsSearchRequested>(_onSearchRequested);
     on<PlantDetailsRequested>(_onDetailsRequested);
     on<PlantsRefreshRequested>(_onRefreshRequested);
+    on<PlantsFilterUpdated>(_onFilterUpdated);
   }
 
   Future<void> _onNearbyRequested(
     PlantsNearbyRequested event,
     Emitter<PlantsState> emit,
   ) async {
+    final filter = event.filter ?? state.filter;
+
     emit(state.copyWith(
       status: PlantsStatus.loading,
       currentLatitude: event.latitude,
       currentLongitude: event.longitude,
+      filter: filter,
     ));
 
     try {
@@ -30,6 +35,7 @@ class PlantsBloc extends Bloc<PlantsEvent, PlantsState> {
         latitude: event.latitude,
         longitude: event.longitude,
         radiusKm: event.radiusKm,
+        filter: filter,
       );
 
       emit(state.copyWith(
@@ -48,13 +54,19 @@ class PlantsBloc extends Bloc<PlantsEvent, PlantsState> {
     PlantsSearchRequested event,
     Emitter<PlantsState> emit,
   ) async {
-    emit(state.copyWith(status: PlantsStatus.loading));
+    final filter = event.filter ?? state.filter;
+
+    emit(state.copyWith(
+      status: PlantsStatus.loading,
+      filter: filter,
+    ));
 
     try {
       final result = await _plantRepository.searchPlants(
         query: event.query,
         latitude: event.latitude,
         longitude: event.longitude,
+        filter: filter,
       );
 
       emit(state.copyWith(
@@ -98,6 +110,23 @@ class PlantsBloc extends Bloc<PlantsEvent, PlantsState> {
       add(PlantsNearbyRequested(
         latitude: state.currentLatitude!,
         longitude: state.currentLongitude!,
+        filter: state.filter,
+      ));
+    }
+  }
+
+  Future<void> _onFilterUpdated(
+    PlantsFilterUpdated event,
+    Emitter<PlantsState> emit,
+  ) async {
+    emit(state.copyWith(filter: event.filter));
+
+    // Refresh plants with new filter
+    if (state.currentLatitude != null && state.currentLongitude != null) {
+      add(PlantsNearbyRequested(
+        latitude: state.currentLatitude!,
+        longitude: state.currentLongitude!,
+        filter: event.filter,
       ));
     }
   }

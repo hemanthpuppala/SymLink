@@ -7,6 +7,9 @@ import '../bloc/plants_bloc.dart';
 import '../bloc/plants_event.dart';
 import '../bloc/plants_state.dart';
 import '../repositories/plant_repository.dart';
+import '../widgets/filter_sheet.dart';
+import '../widgets/plant_card.dart';
+import '../models/plant_filter.dart';
 
 class MapScreen extends StatefulWidget {
   const MapScreen({super.key});
@@ -20,6 +23,7 @@ class _MapScreenState extends State<MapScreen> {
   Set<Marker> _markers = {};
   LatLng? _currentPosition;
   Plant? _selectedPlant;
+  bool _showListView = false;
 
   @override
   void initState() {
@@ -82,6 +86,17 @@ class _MapScreenState extends State<MapScreen> {
     context.push('/plants/${plant.id}');
   }
 
+  void _showFilterSheet() {
+    final plantsBloc = context.read<PlantsBloc>();
+    FilterSheet.show(
+      context,
+      initialFilter: plantsBloc.state.filter,
+      onApply: (filter) {
+        plantsBloc.add(PlantsFilterUpdated(filter));
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return BlocConsumer<PlantsBloc, PlantsState>(
@@ -100,74 +115,110 @@ class _MapScreenState extends State<MapScreen> {
         return Scaffold(
           body: Stack(
             children: [
-              GoogleMap(
-                initialCameraPosition: CameraPosition(
-                  target: _currentPosition!,
-                  zoom: 14,
+              if (_showListView)
+                _buildListView(state)
+              else
+                GoogleMap(
+                  initialCameraPosition: CameraPosition(
+                    target: _currentPosition!,
+                    zoom: 14,
+                  ),
+                  onMapCreated: (controller) {
+                    _mapController = controller;
+                  },
+                  markers: _markers,
+                  myLocationEnabled: true,
+                  myLocationButtonEnabled: false,
+                  zoomControlsEnabled: false,
                 ),
-                onMapCreated: (controller) {
-                  _mapController = controller;
-                },
-                markers: _markers,
-                myLocationEnabled: true,
-                myLocationButtonEnabled: false,
-                zoomControlsEnabled: false,
-              ),
               Positioned(
                 top: MediaQuery.of(context).padding.top + 16,
                 left: 16,
                 right: 16,
                 child: Card(
-                  child: TextField(
-                    decoration: const InputDecoration(
-                      hintText: 'Search water plants...',
-                      prefixIcon: Icon(Icons.search),
-                      border: InputBorder.none,
-                      contentPadding: EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 12,
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          decoration: const InputDecoration(
+                            hintText: 'Search water plants...',
+                            prefixIcon: Icon(Icons.search),
+                            border: InputBorder.none,
+                            contentPadding: EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 12,
+                            ),
+                          ),
+                          onSubmitted: (query) {
+                            if (query.isNotEmpty) {
+                              context.read<PlantsBloc>().add(PlantsSearchRequested(
+                                    query: query,
+                                    latitude: _currentPosition?.latitude,
+                                    longitude: _currentPosition?.longitude,
+                                  ));
+                            }
+                          },
+                        ),
                       ),
-                    ),
-                    onSubmitted: (query) {
-                      if (query.isNotEmpty) {
-                        context.read<PlantsBloc>().add(PlantsSearchRequested(
-                              query: query,
-                              latitude: _currentPosition?.latitude,
-                              longitude: _currentPosition?.longitude,
-                            ));
-                      }
-                    },
+                      _buildFilterButton(state),
+                    ],
                   ),
                 ),
               ),
-              Positioned(
-                bottom: 16 + (_selectedPlant != null ? 180 : 0),
-                right: 16,
-                child: Column(
-                  children: [
-                    FloatingActionButton.small(
-                      heroTag: 'location',
-                      onPressed: () async {
-                        if (_currentPosition != null) {
-                          _mapController?.animateCamera(
-                            CameraUpdate.newLatLng(_currentPosition!),
-                          );
-                        }
-                      },
-                      child: const Icon(Icons.my_location),
-                    ),
-                    const SizedBox(height: 8),
-                    FloatingActionButton.small(
-                      heroTag: 'refresh',
-                      onPressed: () {
-                        context.read<PlantsBloc>().add(PlantsRefreshRequested());
-                      },
-                      child: const Icon(Icons.refresh),
-                    ),
-                  ],
+              if (!_showListView)
+                Positioned(
+                  bottom: 16 + (_selectedPlant != null ? 180 : 0),
+                  right: 16,
+                  child: Column(
+                    children: [
+                      FloatingActionButton.small(
+                        heroTag: 'toggle',
+                        onPressed: () {
+                          setState(() {
+                            _showListView = !_showListView;
+                            _selectedPlant = null;
+                          });
+                        },
+                        child: Icon(_showListView ? Icons.map : Icons.list),
+                      ),
+                      const SizedBox(height: 8),
+                      FloatingActionButton.small(
+                        heroTag: 'location',
+                        onPressed: () async {
+                          if (_currentPosition != null) {
+                            _mapController?.animateCamera(
+                              CameraUpdate.newLatLng(_currentPosition!),
+                            );
+                          }
+                        },
+                        child: const Icon(Icons.my_location),
+                      ),
+                      const SizedBox(height: 8),
+                      FloatingActionButton.small(
+                        heroTag: 'refresh',
+                        onPressed: () {
+                          context.read<PlantsBloc>().add(PlantsRefreshRequested());
+                        },
+                        child: const Icon(Icons.refresh),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-              if (_selectedPlant != null)
+              if (_showListView)
+                Positioned(
+                  bottom: 16,
+                  right: 16,
+                  child: FloatingActionButton.small(
+                    heroTag: 'toggle_map',
+                    onPressed: () {
+                      setState(() {
+                        _showListView = false;
+                      });
+                    },
+                    child: const Icon(Icons.map),
+                  ),
+                ),
+              if (_selectedPlant != null && !_showListView)
                 Positioned(
                   bottom: 16,
                   left: 16,
@@ -175,6 +226,88 @@ class _MapScreenState extends State<MapScreen> {
                   child: _buildPlantCard(_selectedPlant!),
                 ),
             ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildFilterButton(PlantsState state) {
+    final hasFilters = state.filter.hasActiveFilters;
+    return Stack(
+      children: [
+        IconButton(
+          icon: const Icon(Icons.tune),
+          onPressed: _showFilterSheet,
+          tooltip: 'Filter & Sort',
+        ),
+        if (hasFilters)
+          Positioned(
+            right: 8,
+            top: 8,
+            child: Container(
+              width: 8,
+              height: 8,
+              decoration: BoxDecoration(
+                color: Theme.of(context).primaryColor,
+                shape: BoxShape.circle,
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildListView(PlantsState state) {
+    final padding = MediaQuery.of(context).padding;
+
+    if (state.status == PlantsStatus.loading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    if (state.plants.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(
+              Icons.water_drop_outlined,
+              size: 64,
+              color: Colors.grey,
+            ),
+            const SizedBox(height: 16),
+            Text(
+              state.filter.hasActiveFilters
+                  ? 'No plants match your filters'
+                  : 'No water plants found nearby',
+              textAlign: TextAlign.center,
+            ),
+            if (state.filter.hasActiveFilters) ...[
+              const SizedBox(height: 16),
+              TextButton(
+                onPressed: () {
+                  context.read<PlantsBloc>().add(
+                    const PlantsFilterUpdated(PlantFilter()),
+                  );
+                },
+                child: const Text('Clear Filters'),
+              ),
+            ],
+          ],
+        ),
+      );
+    }
+
+    return ListView.builder(
+      padding: EdgeInsets.fromLTRB(16, padding.top + 80, 16, 80),
+      itemCount: state.plants.length,
+      itemBuilder: (context, index) {
+        final plant = state.plants[index];
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 12),
+          child: PlantCard(
+            plant: plant,
+            onTap: () => _showPlantDetails(plant),
           ),
         );
       },

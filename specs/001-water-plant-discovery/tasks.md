@@ -118,14 +118,14 @@ Based on plan.md structure:
 - [x] T055 [US2] Create plant_profile feature module in apps/owner-app/lib/features/plant_profile/
 - [x] T056 [US2] Implement PlantProfileBloc
 - [x] T057 [US2] Create plant form screen with TDS/price/hours in apps/owner-app/lib/features/plant_profile/screens/plant_form_screen.dart
-- [ ] T058 [US2] Create photo manager widget with upload
+- [x] T058 [US2] Create photo manager widget with upload in apps/owner-app/lib/features/plant_profile/widgets/photo_manager.dart
 - [x] T059 [US2] Create documents feature module in apps/owner-app/lib/features/documents/
 - [x] T060 [US2] Implement DocumentsBloc
 - [x] T061 [US2] Create verification screen in apps/owner-app/lib/features/documents/screens/verification_screen.dart
-- [ ] T062 [US2] Create verification status widget
-- [ ] T063 [US2] Create notifications feature module
-- [ ] T064 [US2] Implement NotificationsBloc
-- [ ] T065 [US2] Create notifications list screen
+- [x] T062 [US2] Create verification status widget in apps/owner-app/lib/features/documents/widgets/verification_status_widget.dart
+- [x] T063 [US2] Create notifications feature module in apps/owner-app/lib/features/notifications/
+- [x] T064 [US2] Implement NotificationsBloc in apps/owner-app/lib/features/notifications/bloc/notifications_bloc.dart
+- [x] T065 [US2] Create notifications list screen in apps/owner-app/lib/features/notifications/screens/notifications_screen.dart
 
 **Checkpoint**: Owner can register, login, create plant profile, submit verification documents ✅
 
@@ -191,7 +191,7 @@ Based on plan.md structure:
 
 - [x] T095 [US3] Create dashboard home page with summary stats at apps/admin/src/app/dashboard/page.tsx
 - [x] T096 [US3] Create verifications list page at apps/admin/src/app/verification/page.tsx
-- [ ] T097 [US3] Create verification detail page with document viewer
+- [x] T097 [US3] Create verification detail page with document viewer
 - [x] T098 [US3] Create approve/reject actions in verification page
 - [x] T099 [US3] Create plants list page at apps/admin/src/app/plants/page.tsx
 - [x] T100 [US3] Create plant detail page
@@ -209,20 +209,20 @@ Based on plan.md structure:
 
 ### Backend Implementation for US4
 
-- [ ] T103 [US4] Implement POST /v1/plants/{plantId}/view to record view in apps/backend/src/modules/plants/plants.controller.ts
-- [ ] T104 [US4] Implement GET /v1/plants/share/{plantId} public profile in apps/backend/src/modules/plants/plants.controller.ts
+- [x] T103 [US4] Implement POST /v1/plants/{plantId}/view to record view in apps/backend/src/modules/consumer/consumer-plant.controller.ts
+- [x] T104 [US4] Implement GET /v1/plants/share/{plantId} public profile in apps/backend/src/modules/consumer/consumer-plant.controller.ts
 
 ### Consumer App Implementation for US4
 
-- [ ] T105 [US4] Create plant_details feature module in apps/consumer-app/lib/features/plant_details/
-- [ ] T106 [US4] Implement PlantDetailsBloc in apps/consumer-app/lib/features/plant_details/bloc/plant_details_bloc.dart
-- [ ] T107 [US4] Create plant detail screen in apps/consumer-app/lib/features/plant_details/screens/plant_detail_screen.dart
-- [ ] T108 [US4] Create photo carousel widget in apps/consumer-app/lib/features/plant_details/widgets/photo_carousel.dart
-- [ ] T109 [US4] Create verified badge widget in apps/consumer-app/lib/features/plant_details/widgets/verified_badge.dart
-- [ ] T110 [US4] Implement phone dialer action in apps/consumer-app/lib/features/plant_details/screens/plant_detail_screen.dart
-- [ ] T111 [US4] Navigate to detail from map tooltip in apps/consumer-app/lib/features/map/widgets/plant_tooltip.dart
+- [x] T105 [US4] Create plant_details feature module in apps/consumer-app/lib/features/plants/screens/plant_details_screen.dart
+- [x] T106 [US4] Implement PlantDetailsBloc - uses PlantsBloc with PlantDetailsRequested event
+- [x] T107 [US4] Create plant detail screen in apps/consumer-app/lib/features/plants/screens/plant_details_screen.dart
+- [x] T108 [US4] Create photo carousel widget - PageView in plant_details_screen.dart
+- [x] T109 [US4] Create verified badge widget - inline in plant_details_screen.dart
+- [x] T110 [US4] Implement phone dialer action - _callPhone method in plant_details_screen.dart
+- [x] T111 [US4] Navigate to detail from map tooltip - _showPlantDetails in map_screen.dart
 
-**Checkpoint**: Consumer can view full plant details, see photos, verified status, and call owner
+**Checkpoint**: Consumer can view full plant details, see photos, verified status, and call owner ✅
 
 ---
 
@@ -234,12 +234,12 @@ Based on plan.md structure:
 
 ### Implementation for US5
 
-- [ ] T112 [US5] Ensure PATCH /v1/owner/plant updates are instant (no additional caching) in apps/backend/src/modules/owner/owner-plant.service.ts
-- [ ] T113 [US5] Add open/closed toggle to owner dashboard in apps/owner-app/lib/features/dashboard/screens/dashboard_screen.dart
-- [ ] T114 [US5] Create quick-edit TDS widget on dashboard in apps/owner-app/lib/features/dashboard/widgets/quick_edit_tds.dart
-- [ ] T115 [US5] Create quick-edit price widget on dashboard in apps/owner-app/lib/features/dashboard/widgets/quick_edit_price.dart
+- [x] T112 [US5] Ensure PATCH /v1/owner/plant updates are instant - Prisma updates are immediate, no caching layer
+- [x] T113 [US5] Add open/closed toggle to owner dashboard in apps/owner-app/lib/features/dashboard/screens/dashboard_screen.dart
+- [x] T114 [US5] Create quick-edit TDS widget - integrated in _QuickEditSheet in dashboard_screen.dart
+- [x] T115 [US5] Create quick-edit price widget - integrated in _QuickEditSheet in dashboard_screen.dart
 
-**Checkpoint**: Owner can quickly update plant info from dashboard, changes appear immediately in consumer app
+**Checkpoint**: Owner can quickly update plant info from dashboard, changes appear immediately in consumer app ✅
 
 ---
 
@@ -316,11 +316,11 @@ Based on plan.md structure:
 
 ### Implementation for US6
 
-- [ ] T162 [US6] Add sort and filter params to GET /v1/plants in apps/backend/src/modules/plants/plants.controller.ts
-- [ ] T163 [US6] Create filter sheet widget in apps/consumer-app/lib/features/map/widgets/filter_sheet.dart
-- [ ] T164 [US6] Add filter/sort state to MapBloc in apps/consumer-app/lib/features/map/bloc/map_bloc.dart
-- [ ] T165 [US6] Create list view toggle for map screen in apps/consumer-app/lib/features/map/screens/map_screen.dart
-- [ ] T166 [US6] Create plant list view in apps/consumer-app/lib/features/map/widgets/plant_list_view.dart
+- [x] T162 [US6] Add sort and filter params to GET /v1/plants in apps/backend/src/modules/consumer/consumer-plant.controller.ts
+- [x] T163 [US6] Create filter sheet widget in apps/consumer-app/lib/features/plants/widgets/filter_sheet.dart
+- [x] T164 [US6] Add filter/sort state to PlantsBloc in apps/consumer-app/lib/features/plants/bloc/plants_bloc.dart
+- [x] T165 [US6] Create list view toggle for map screen in apps/consumer-app/lib/features/plants/screens/map_screen.dart
+- [x] T166 [US6] Create plant list view in apps/consumer-app/lib/features/plants/screens/map_screen.dart (integrated)
 
 **Checkpoint**: Consumer can filter and sort plants, toggle between map and list view
 
@@ -334,10 +334,10 @@ Based on plan.md structure:
 
 ### Implementation for US7
 
-- [ ] T167 [US7] Implement GET /v1/owner/analytics in apps/backend/src/modules/owner/owner-analytics.controller.ts
-- [ ] T168 [US7] Implement view count aggregation with 7-day history in apps/backend/src/modules/owner/owner-analytics.service.ts
-- [ ] T169 [US7] Add analytics widget to owner dashboard in apps/owner-app/lib/features/dashboard/widgets/analytics_card.dart
-- [ ] T170 [US7] Create analytics detail screen with chart in apps/owner-app/lib/features/dashboard/screens/analytics_screen.dart
+- [x] T167 [US7] Implement GET /v1/owner/analytics in apps/backend/src/modules/owner/owner-analytics.controller.ts
+- [x] T168 [US7] Implement view count aggregation with 7-day history in owner-analytics.controller.ts (integrated)
+- [x] T169 [US7] Add analytics widget to owner dashboard in apps/owner-app/lib/features/analytics/widgets/analytics_card.dart
+- [x] T170 [US7] Create analytics detail screen with chart in apps/owner-app/lib/features/analytics/screens/analytics_screen.dart
 
 **Checkpoint**: Owner can see view counts and weekly trend on dashboard
 
@@ -351,11 +351,11 @@ Based on plan.md structure:
 
 ### Implementation for US8
 
-- [ ] T171 [US8] Implement GET /v1/owner/plant/share in apps/backend/src/modules/owner/owner-plant.controller.ts
-- [ ] T172 [US8] Generate QR code image in apps/backend/src/modules/owner/owner-plant.service.ts
-- [ ] T173 [US8] Create share profile screen in apps/owner-app/lib/features/plant_profile/screens/share_profile_screen.dart
-- [ ] T174 [US8] Implement share sheet with copy/WhatsApp/social in apps/owner-app/lib/features/plant_profile/widgets/share_sheet.dart
-- [ ] T175 [US8] Create public profile page (web) at apps/admin/src/app/p/[id]/page.tsx
+- [x] T171 [US8] Implement GET /v1/owner/plant/:id/share in apps/backend/src/modules/owner/owner-plant.controller.ts
+- [x] T172 [US8] QR code generation done client-side using qr_flutter package
+- [x] T173 [US8] Create share profile screen in apps/owner-app/lib/features/share/screens/share_profile_screen.dart
+- [x] T174 [US8] Share sheet integrated in share_profile_screen.dart with copy/share options
+- [x] T175 [US8] Create public profile page (web) at apps/admin/src/app/p/[id]/page.tsx
 
 **Checkpoint**: Owner can share link/QR, link opens public profile in browser
 
