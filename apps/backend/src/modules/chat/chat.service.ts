@@ -154,6 +154,7 @@ export class ChatService {
     query: GetMessagesQueryDto,
   ): Promise<{ messages: MessageResponseDto[]; hasMore: boolean; conversation: any }> {
     // Verify access and get conversation with related data
+    // Include readReceiptsEnabled to respect privacy settings
     const conversation = await this.prisma.conversation.findUnique({
       where: { id: conversationId },
       include: {
@@ -168,12 +169,14 @@ export class ChatService {
           select: {
             id: true,
             displayName: true,
+            readReceiptsEnabled: true,
           },
         },
         owner: {
           select: {
             id: true,
             name: true,
+            readReceiptsEnabled: true,
           },
         },
       },
@@ -229,17 +232,31 @@ export class ChatService {
         : conversation.consumer.displayName,
     };
 
+    // Check if the OTHER party has read receipts enabled
+    // readReceiptsEnabled means "allow others to see when I've read their messages"
+    // So we check the READER's setting (opposite party) to decide if we show readAt
+    const otherPartyReadReceiptsEnabled = userType === 'consumer'
+      ? conversation.owner.readReceiptsEnabled
+      : conversation.consumer.readReceiptsEnabled;
+
     return {
-      messages: messages.reverse().map((msg) => ({
-        id: msg.id,
-        conversationId: msg.conversationId,
-        senderType: msg.senderType as 'consumer' | 'owner',
-        senderId: msg.senderId,
-        content: msg.content,
-        sentAt: msg.sentAt.toISOString(),
-        deliveredAt: msg.deliveredAt?.toISOString(),
-        readAt: msg.readAt?.toISOString(),
-      })),
+      messages: messages.reverse().map((msg) => {
+        // For messages I SENT, show readAt only if the other party has read receipts enabled
+        // For messages I RECEIVED, readAt is irrelevant (I'm the one who read them)
+        const isMyMessage = msg.senderType === userType;
+        const shouldShowReadAt = isMyMessage ? otherPartyReadReceiptsEnabled : true;
+
+        return {
+          id: msg.id,
+          conversationId: msg.conversationId,
+          senderType: msg.senderType as 'consumer' | 'owner',
+          senderId: msg.senderId,
+          content: msg.content,
+          sentAt: msg.sentAt.toISOString(),
+          deliveredAt: msg.deliveredAt?.toISOString(),
+          readAt: shouldShowReadAt ? msg.readAt?.toISOString() : undefined,
+        };
+      }),
       hasMore,
       conversation: conversationInfo,
     };
