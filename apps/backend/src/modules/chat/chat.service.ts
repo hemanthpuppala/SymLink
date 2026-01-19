@@ -326,7 +326,7 @@ export class ChatService {
     // Mark all messages from the other party as read
     const otherPartyType = userType === 'consumer' ? 'owner' : 'consumer';
 
-    await this.prisma.message.updateMany({
+    const result = await this.prisma.message.updateMany({
       where: {
         conversationId,
         senderType: otherPartyType,
@@ -336,6 +336,17 @@ export class ChatService {
         readAt: new Date(),
       },
     });
+
+    // Notify both parties that conversation was updated (for badge refresh)
+    if (result.count > 0) {
+      this.syncGateway.notifyConversationUpdated({
+        id: conversationId,
+        consumerId: conversation.consumerId,
+        ownerId: conversation.ownerId,
+        readBy: userType,
+        messagesRead: result.count,
+      });
+    }
   }
 
   async markMessageAsDelivered(messageId: string): Promise<void> {

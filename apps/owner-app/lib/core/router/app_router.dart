@@ -352,6 +352,7 @@ class _MainShellState extends State<MainShell> {
   @override
   void initState() {
     super.initState();
+    _ensureSyncConnected();
     _loadUnreadCount();
     _setupSyncListeners();
   }
@@ -363,14 +364,28 @@ class _MainShellState extends State<MainShell> {
     super.dispose();
   }
 
+  Future<void> _ensureSyncConnected() async {
+    if (!SyncService.instance.isConnected) {
+      final storage = RepositoryProvider.of<SecureStorage>(context);
+      final apiClient = RepositoryProvider.of<ApiClient>(context);
+      final token = await storage.getAccessToken();
+      if (token != null) {
+        print('[MainShell] Initializing SyncService');
+        SyncService.instance.initialize(apiClient.baseUrl, token);
+      }
+    }
+  }
+
   void _setupSyncListeners() {
     // Listen for new messages - reload unread count
-    _messageSub = SyncService.instance.onNewMessage.listen((_) {
+    _messageSub = SyncService.instance.onNewMessage.listen((data) {
+      print('[MainShell] Received new message event: $data');
       _loadUnreadCount();
     });
 
     // Listen for conversation updates (e.g., marking as read)
-    _conversationSub = SyncService.instance.onConversationUpdated.listen((_) {
+    _conversationSub = SyncService.instance.onConversationUpdated.listen((data) {
+      print('[MainShell] Conversation updated: $data');
       _loadUnreadCount();
     });
   }
