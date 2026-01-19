@@ -998,6 +998,84 @@ class _PlantDetailsScreenState extends State<PlantDetailsScreen> {
     );
   }
 
+  Widget _buildPlantMap() {
+    final lat = (_plant?['latitude'] as num?)?.toDouble();
+    final lng = (_plant?['longitude'] as num?)?.toDouble();
+
+    if (lat == null || lng == null) {
+      return Container(
+        color: Colors.grey.shade200,
+        child: const Center(
+          child: Icon(Icons.location_off, size: 60, color: Colors.grey),
+        ),
+      );
+    }
+
+    final plantLocation = LatLng(lat, lng);
+
+    return Stack(
+      children: [
+        FlutterMap(
+          options: MapOptions(
+            initialCenter: plantLocation,
+            initialZoom: 16.0, // ~500m radius view
+            interactionOptions: const InteractionOptions(
+              flags: InteractiveFlag.none, // Disable interactions for preview
+            ),
+          ),
+          children: [
+            TileLayer(
+              urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+              userAgentPackageName: 'com.flowgrid.consumer',
+            ),
+            MarkerLayer(
+              markers: [
+                Marker(
+                  point: plantLocation,
+                  width: 50,
+                  height: 50,
+                  child: const Icon(
+                    Icons.location_on,
+                    color: Colors.green,
+                    size: 50,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+        // Tap to open directions overlay
+        Positioned(
+          bottom: 8,
+          right: 8,
+          child: Material(
+            elevation: 2,
+            borderRadius: BorderRadius.circular(20),
+            child: InkWell(
+              onTap: _openDirections,
+              borderRadius: BorderRadius.circular(20),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.directions, size: 18, color: Colors.blue),
+                    SizedBox(width: 4),
+                    Text('Get Directions', style: TextStyle(color: Colors.blue, fontWeight: FontWeight.w500)),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
@@ -1052,21 +1130,10 @@ class _PlantDetailsScreenState extends State<PlantDetailsScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // Photos section (placeholder for now)
-              Container(
+              // Zoomed-in map showing plant location
+              SizedBox(
                 height: 200,
-                color: Colors.grey.shade200,
-                child: _plant!['photos'] != null && (_plant!['photos'] as List).isNotEmpty
-                    ? Image.network(
-                        _plant!['photos'][0],
-                        fit: BoxFit.cover,
-                        errorBuilder: (_, __, ___) => const Center(
-                          child: Icon(Icons.water_drop, size: 80, color: Colors.blue),
-                        ),
-                      )
-                    : const Center(
-                        child: Icon(Icons.water_drop, size: 80, color: Colors.blue),
-                      ),
+                child: _buildPlantMap(),
               ),
 
               // Status banner

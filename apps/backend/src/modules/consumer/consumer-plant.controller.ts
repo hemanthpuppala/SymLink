@@ -13,6 +13,15 @@ import {
   SearchPlantsQueryDto,
 } from './dto/consumer-plant.dto';
 
+// Helper to parse photos JSON string to array
+function parsePhotos(photos: string): string[] {
+  try {
+    return JSON.parse(photos);
+  } catch {
+    return [];
+  }
+}
+
 @Controller('v1/consumer/plants')
 export class ConsumerPlantController {
   constructor(private readonly prisma: PrismaService) {}
@@ -61,6 +70,7 @@ export class ConsumerPlantController {
     const plantsWithDistance = plants
       .map((plant) => ({
         ...plant,
+        photos: parsePhotos(plant.photos),
         distance: this.calculateDistance(latitude, longitude, plant.latitude, plant.longitude),
       }))
       .filter((plant) => plant.distance <= radiusKm)
@@ -80,9 +90,10 @@ export class ConsumerPlantController {
     };
 
     if (searchQuery) {
+      // SQLite doesn't support mode: 'insensitive', use contains only
       where.OR = [
-        { name: { contains: searchQuery, mode: 'insensitive' } },
-        { address: { contains: searchQuery, mode: 'insensitive' } },
+        { name: { contains: searchQuery } },
+        { address: { contains: searchQuery } },
       ];
     }
 
@@ -113,6 +124,7 @@ export class ConsumerPlantController {
 
     // Calculate distance if coordinates provided
     const plantsWithDistance = plants.map((plant) => {
+      const plantWithPhotos = { ...plant, photos: parsePhotos(plant.photos) };
       if (latitude !== undefined && longitude !== undefined) {
         const distance = this.calculateDistance(
           latitude,
@@ -120,9 +132,9 @@ export class ConsumerPlantController {
           plant.latitude,
           plant.longitude,
         );
-        return { ...plant, distance };
+        return { ...plantWithPhotos, distance };
       }
-      return plant;
+      return plantWithPhotos;
     });
 
     // Sort by distance if coordinates provided
@@ -175,7 +187,10 @@ export class ConsumerPlantController {
       });
     }
 
-    return plant;
+    return {
+      ...plant,
+      photos: parsePhotos(plant.photos),
+    };
   }
 
   private calculateDistance(
